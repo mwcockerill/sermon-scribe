@@ -80,20 +80,34 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Getting metadata for: $VIDEO_URL"
 
-          # Get video metadata
-          VIDEO_INFO=$(yt-dlp --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL" 2>/dev/null)
+          # Get video metadata (show errors)
+          VIDEO_INFO=$(yt-dlp --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL")
+          echo "Raw video info: $VIDEO_INFO"
+
           VIDEO_ID=$(echo "$VIDEO_INFO" | cut -f1)
           TITLE=$(echo "$VIDEO_INFO" | cut -f2)
           UPLOAD_DATE=$(echo "$VIDEO_INFO" | cut -f3)
 
+          echo "Video ID: $VIDEO_ID"
           echo "Title: $TITLE"
           echo "Upload date: $UPLOAD_DATE"
 
-          # Format date as YYYY-MM-DD
-          FORMATTED_DATE="${UPLOAD_DATE:0:4}-${UPLOAD_DATE:4:2}-${UPLOAD_DATE:6:2}"
+          # Format date as YYYY-MM-DD (handle empty/missing date)
+          if [ -n "$UPLOAD_DATE" ] && [ ${#UPLOAD_DATE} -ge 8 ]; then
+            FORMATTED_DATE="${UPLOAD_DATE:0:4}-${UPLOAD_DATE:4:2}-${UPLOAD_DATE:6:2}"
+          else
+            FORMATTED_DATE=$(date +%Y-%m-%d)
+            echo "Warning: Using today's date as fallback"
+          fi
 
           # Sanitize title for filename
           SAFE_TITLE=$(echo "$TITLE" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100)
+
+          # Fallback if title is empty
+          if [ -z "$SAFE_TITLE" ]; then
+            SAFE_TITLE="$VIDEO_ID"
+          fi
+
           FILENAME="sermon_${FORMATTED_DATE}_${SAFE_TITLE}"
 
           echo "Filename: $FILENAME"
