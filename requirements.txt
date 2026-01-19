@@ -1,0 +1,16 @@
+# Sermon Scribe Dependencies
+
+# Video download
+yt-dlp
+
+# Transcription
+openai-whisper
+
+# AI processing (segmentation & cleanup)
+anthropic
+
+# YouTube monitoring
+google-api-python-client
+
+# Utilities
+pyyaml

@@ -1,0 +1,21 @@
+# Output files
+output/
+*_transcript.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Whisper models (large files)
+*.pt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
