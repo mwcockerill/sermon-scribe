@@ -1,5 +1,11 @@
 # Sermon Scribe Makefile
 
+# Load .env file if it exists
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 # Default video URL (override with: make download URL=https://...)
 URL ?=
 # Whisper model size (tiny, base, small, medium, large)

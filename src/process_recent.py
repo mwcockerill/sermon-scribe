@@ -18,9 +18,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from monitor import fetch_latest_videos, sanitize_filename
-from transcribe import transcribe_audio, segments_to_text
+from transcribe import transcribe, segments_to_text
 from segment import segment_transcript, extract_sermon_segments, segments_to_text as sermon_to_text
-from cleanup import cleanup_transcript
+from cleanup import cleanup_sermon
 
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
@@ -120,7 +120,7 @@ def process_video(video: dict) -> bool:
     # 2. Transcribe
     print(f"  Transcribing with Whisper ({WHISPER_MODEL})...")
     try:
-        result = transcribe_audio(str(audio_file), model_name=WHISPER_MODEL)
+        result = transcribe(str(audio_file), model_name=WHISPER_MODEL)
         with open(transcript_path, "w") as f:
             json.dump(result, f, indent=2)
     except Exception as e:
@@ -151,7 +151,7 @@ def process_video(video: dict) -> bool:
     # 4. Cleanup
     print(f"  Cleaning up transcript...")
     try:
-        cleaned = cleanup_transcript(sermon_text, model=GPT_MODEL)
+        cleaned = cleanup_sermon(sermon_text, model=GPT_MODEL)
     except Exception as e:
         print(f"  Error cleaning: {e}")
         return False
@@ -237,9 +237,39 @@ def main():
     cutoff = datetime.now() - timedelta(days=args.days)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
 
+    def extract_date_from_title(title: str) -> str | None:
+        """Try to extract date from title."""
+        # Match "Jan. 18, 2026" or "Dec. 28, 2025" format
+        match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})', title)
+        if match:
+            month_map = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+            month = month_map[match.group(1)]
+            day = match.group(2).zfill(2)
+            year = match.group(3)
+            return f"{year}-{month}-{day}"
+
+        # Match YYYY MM DD pattern (Morning Prayer titles)
+        match = re.search(r'(\d{4})\s+(\d{2})\s+(\d{2})', title)
+        if match:
+            return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+        # Match YYYY-MM-DD pattern
+        match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
+        if match:
+            return match.group(1)
+
+        return None
+
     recent_videos = []
     for v in videos:
         upload_date = v.get("upload_date", "")
+
+        # If upload_date is NA or empty, try to extract from title
+        if not upload_date or upload_date == "NA":
+            upload_date = extract_date_from_title(v.get("title", ""))
+
         if upload_date and upload_date >= cutoff_str:
             recent_videos.append(v)
         elif not upload_date:
@@ -255,9 +285,9 @@ def main():
     for video in recent_videos:
         title = video.get("title", "")
 
-        # Skip daily videos (e.g., daily devotionals)
-        if "Daily" in title:
-            print(f"  [SKIP] {title[:50]}... (daily video)")
+        # Skip daily/morning videos (e.g., daily devotionals, morning prayer)
+        if "Daily" in title or "Morning" in title:
+            print(f"  [SKIP] {title[:50]}... (daily/morning video)")
             continue
 
         if video_has_transcript(video):

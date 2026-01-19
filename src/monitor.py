@@ -35,70 +35,83 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
     """
     Fetch latest videos from a YouTube channel using yt-dlp.
 
+    Checks both /videos and /streams tabs to get all content.
+
     Args:
         channel_id: YouTube channel ID (UCxxxx) or handle (@name)
-        limit: Number of videos to fetch
+        limit: Number of videos to fetch per tab
 
     Returns:
         List of video dicts with id, title, url
     """
     # Support both channel ID and handle formats
     if channel_id.startswith("@"):
-        channel_url = f"https://www.youtube.com/{channel_id}/videos"
+        base_url = f"https://www.youtube.com/{channel_id}"
     elif channel_id.startswith("UC"):
-        channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
+        base_url = f"https://www.youtube.com/channel/{channel_id}"
     else:
-        channel_url = f"https://www.youtube.com/@{channel_id}/videos"
+        base_url = f"https://www.youtube.com/@{channel_id}"
 
-    try:
-        result = subprocess.run(
-            [
-                "yt-dlp",
-                "--flat-playlist",
-                "--print", "%(id)s\t%(title)s\t%(upload_date)s",
-                "--playlist-end", str(limit),
-                channel_url
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
+    # Check both videos and streams tabs
+    tabs = ["/videos", "/streams"]
+    all_videos = {}  # Use dict to dedupe by video_id
 
-        if result.returncode != 0:
-            raise RuntimeError(f"yt-dlp failed: {result.stderr}")
+    for tab in tabs:
+        channel_url = base_url + tab
+        try:
+            result = subprocess.run(
+                [
+                    "yt-dlp",
+                    "--flat-playlist",
+                    "--print", "%(id)s\t%(title)s\t%(upload_date)s",
+                    "--playlist-end", str(limit),
+                    channel_url
+                ],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
 
-        videos = []
-        for line in result.stdout.strip().split("\n"):
-            if "\t" in line:
-                parts = line.split("\t")
-                if len(parts) >= 3:
-                    video_id, title, upload_date = parts[0], parts[1], parts[2]
-                else:
-                    video_id, title, upload_date = parts[0], parts[1] if len(parts) > 1 else "", "NA"
+            if result.returncode != 0:
+                print(f"Warning: Failed to fetch {tab}: {result.stderr}")
+                continue
 
-                # Format date as YYYY-MM-DD
-                if upload_date and upload_date != "NA" and len(upload_date) == 8:
-                    formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
-                else:
-                    formatted_date = upload_date
+            for line in result.stdout.strip().split("\n"):
+                if "\t" in line:
+                    parts = line.split("\t")
+                    if len(parts) >= 3:
+                        video_id, title, upload_date = parts[0], parts[1], parts[2]
+                    else:
+                        video_id, title, upload_date = parts[0], parts[1] if len(parts) > 1 else "", "NA"
 
-                # Sanitize title for filename
-                safe_title = sanitize_filename(title)
+                    # Skip if already seen
+                    if video_id in all_videos:
+                        continue
 
-                videos.append({
-                    "video_id": video_id,
-                    "title": title,
-                    "safe_title": safe_title,
-                    "upload_date": formatted_date,
-                    "url": f"https://www.youtube.com/watch?v={video_id}"
-                })
+                    # Format date as YYYY-MM-DD
+                    if upload_date and upload_date != "NA" and len(upload_date) == 8:
+                        formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+                    else:
+                        formatted_date = upload_date
 
-        return videos
+                    # Sanitize title for filename
+                    safe_title = sanitize_filename(title)
 
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("yt-dlp timed out fetching channel videos")
-    except FileNotFoundError:
-        raise RuntimeError("yt-dlp not found - please install it")
+                    all_videos[video_id] = {
+                        "video_id": video_id,
+                        "title": title,
+                        "safe_title": safe_title,
+                        "upload_date": formatted_date,
+                        "url": f"https://www.youtube.com/watch?v={video_id}"
+                    }
+
+        except subprocess.TimeoutExpired:
+            print(f"Warning: Timeout fetching {tab}")
+            continue
+        except FileNotFoundError:
+            raise RuntimeError("yt-dlp not found - please install it")
+
+    return list(all_videos.values())
 
 
 def load_state() -> dict:
@@ -144,9 +157,10 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
         if video["video_id"] == last_video_id:
             break
 
-        # Skip daily videos (e.g., daily devotionals)
-        if "Daily" in video.get("title", ""):
-            print(f"Skipping daily video: {video['title']}")
+        # Skip daily/morning videos (e.g., daily devotionals, morning prayer)
+        title = video.get("title", "")
+        if "Daily" in title or "Morning" in title:
+            print(f"Skipping daily/morning video: {title}")
             continue
 
         new_videos.append(video)
