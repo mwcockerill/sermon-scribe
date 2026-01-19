@@ -11,7 +11,7 @@ INPUT ?= output/audio.mp3
 # Transcript file for segmentation
 TRANSCRIPT ?= audio_transcript.json
 
-.PHONY: install download transcribe segment clean help
+.PHONY: install download transcribe segment cleanup clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
@@ -20,15 +20,16 @@ help:
 	@echo "  make download URL=<url>   Download audio from YouTube video"
 	@echo "  make transcribe           Transcribe the downloaded audio"
 	@echo "  make segment              Find sermon boundaries in transcript"
+	@echo "  make cleanup              Polish the extracted sermon"
 	@echo "  make run URL=<url>        Download and transcribe in one step"
-	@echo "  make full URL=<url>       Download, transcribe, and segment"
+	@echo "  make full URL=<url>       Full pipeline: download, transcribe, segment, cleanup"
 	@echo "  make clean                Remove downloaded files and transcripts"
 	@echo ""
 	@echo "Options:"
 	@echo "  MODEL=base                Whisper model (tiny/base/small/medium/large)"
-	@echo "  GPT=gpt-4o-mini           OpenAI model for segmentation"
+	@echo "  GPT=gpt-4o-mini           OpenAI model for segmentation/cleanup"
 	@echo ""
-	@echo "Requires: OPENAI_API_KEY environment variable for segmentation"
+	@echo "Requires: OPENAI_API_KEY environment variable for segmentation/cleanup"
 	@echo ""
 	@echo "Example:"
 	@echo "  make full URL=https://www.youtube.com/watch?v=VIDEO_ID"
@@ -51,6 +52,9 @@ transcribe:
 segment:
 	python3 src/segment.py $(TRANSCRIPT) $(GPT)
 
+cleanup:
+	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
+
 run:
 ifndef URL
 	$(error URL is required. Usage: make run URL=https://youtube.com/watch?v=...)
@@ -69,6 +73,9 @@ endif
 	yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	python3 src/transcribe.py output/audio.mp3 $(MODEL)
 	python3 src/segment.py audio_transcript.json $(GPT)
+	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
+	@echo ""
+	@echo "Done! Cleaned sermon saved to: output/sermon.txt"
 
 clean:
 	rm -rf output/*
