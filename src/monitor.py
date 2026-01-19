@@ -1,61 +1,70 @@
 """
-YouTube channel monitor using RSS feeds.
+YouTube channel monitor using yt-dlp.
 
 Checks for new video uploads and triggers the pipeline when detected.
 """
 
 import json
-import xml.etree.ElementTree as ET
+import subprocess
 from pathlib import Path
-from urllib.request import urlopen
-from urllib.error import URLError
-from datetime import datetime
+from datetime import datetime, timezone
 
 
-RSS_URL_TEMPLATE = "https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 STATE_FILE = Path(__file__).parent.parent / "state.json"
 
 
-def fetch_rss(channel_id: str) -> str:
-    """Fetch RSS feed for a YouTube channel."""
-    url = RSS_URL_TEMPLATE.format(channel_id=channel_id)
+def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
+    """
+    Fetch latest videos from a YouTube channel using yt-dlp.
+
+    Args:
+        channel_id: YouTube channel ID (UCxxxx) or handle (@name)
+        limit: Number of videos to fetch
+
+    Returns:
+        List of video dicts with id, title, url
+    """
+    # Support both channel ID and handle formats
+    if channel_id.startswith("@"):
+        channel_url = f"https://www.youtube.com/{channel_id}/videos"
+    elif channel_id.startswith("UC"):
+        channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    else:
+        channel_url = f"https://www.youtube.com/@{channel_id}/videos"
+
     try:
-        with urlopen(url, timeout=30) as response:
-            return response.read().decode("utf-8")
-    except URLError as e:
-        raise RuntimeError(f"Failed to fetch RSS feed: {e}")
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--flat-playlist",
+                "--print", "%(id)s\t%(title)s",
+                "--playlist-end", str(limit),
+                channel_url
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
 
+        if result.returncode != 0:
+            raise RuntimeError(f"yt-dlp failed: {result.stderr}")
 
-def parse_feed(xml_content: str) -> list[dict]:
-    """
-    Parse RSS feed and extract video information.
+        videos = []
+        for line in result.stdout.strip().split("\n"):
+            if "\t" in line:
+                video_id, title = line.split("\t", 1)
+                videos.append({
+                    "video_id": video_id,
+                    "title": title,
+                    "url": f"https://www.youtube.com/watch?v={video_id}"
+                })
 
-    Returns list of videos, newest first.
-    """
-    root = ET.fromstring(xml_content)
+        return videos
 
-    # YouTube RSS uses Atom namespace
-    ns = {
-        "atom": "http://www.w3.org/2005/Atom",
-        "yt": "http://www.youtube.com/xml/schemas/2015",
-        "media": "http://search.yahoo.com/mrss/"
-    }
-
-    videos = []
-    for entry in root.findall("atom:entry", ns):
-        video_id = entry.find("yt:videoId", ns)
-        title = entry.find("atom:title", ns)
-        published = entry.find("atom:published", ns)
-
-        if video_id is not None:
-            videos.append({
-                "video_id": video_id.text,
-                "title": title.text if title is not None else "Unknown",
-                "published": published.text if published is not None else None,
-                "url": f"https://www.youtube.com/watch?v={video_id.text}"
-            })
-
-    return videos
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("yt-dlp timed out fetching channel videos")
+    except FileNotFoundError:
+        raise RuntimeError("yt-dlp not found - please install it")
 
 
 def load_state() -> dict:
@@ -68,7 +77,7 @@ def load_state() -> dict:
 
 def save_state(state: dict) -> None:
     """Save the state file."""
-    state["last_check"] = datetime.utcnow().isoformat()
+    state["last_check"] = datetime.now(timezone.utc).isoformat()
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
@@ -82,10 +91,10 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
     state = load_state()
     last_video_id = state.get("last_video_id")
 
-    xml_content = fetch_rss(channel_id)
-    videos = parse_feed(xml_content)
+    videos = fetch_latest_videos(channel_id)
 
     if not videos:
+        print("No videos found on channel")
         return []
 
     # If no previous state, just record the latest and return empty
@@ -125,6 +134,7 @@ if __name__ == "__main__":
     if not channel_id:
         print("Usage: python monitor.py <channel_id>")
         print("Or set YOUTUBE_CHANNEL_ID environment variable")
+        print("\nSupports: UC... channel IDs or @handle format")
         sys.exit(1)
 
     print(f"Checking channel: {channel_id}")
@@ -137,8 +147,7 @@ if __name__ == "__main__":
             print(f"  - {video['title']}")
             print(f"    {video['url']}")
 
-        # Output the newest video URL for pipeline
-        # (In GitHub Actions, we'll capture this)
+        # Output for GitHub Actions
         print(f"\n::set-output name=new_video::true")
         print(f"::set-output name=video_url::{new_videos[0]['url']}")
         print(f"::set-output name=video_id::{new_videos[0]['video_id']}")
