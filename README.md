@@ -48,26 +48,18 @@ To enable automatic monitoring and processing:
 1. **Add GitHub Secrets** (Settings → Secrets and variables → Actions):
    - `OPENAI_API_KEY` - Your OpenAI API key
    - `YOUTUBE_CHANNEL_ID` - The channel ID to monitor
-   - `YOUTUBE_COOKIES` - (Optional) YouTube cookies to avoid bot detection
 
 2. **Find Your Channel ID**:
    - Go to the YouTube channel
    - View page source and search for `channelId`
    - Or use a service like [Comment Picker](https://commentpicker.com/youtube-channel-id.php)
 
-3. **Export YouTube Cookies** (Recommended):
-   YouTube may block requests from GitHub Actions datacenter IPs. To avoid this:
-   - Install a browser extension like "Get cookies.txt LOCALLY"
-   - Go to youtube.com while logged in
-   - Export cookies in Netscape format
-   - Add the entire cookie file contents as `YOUTUBE_COOKIES` secret
-
-4. **Enable the Workflow**:
+3. **Enable the Workflow**:
    - The workflow runs at 8am and 8pm UTC automatically
    - You can also trigger it manually from Actions tab
    - Use "Force URL" input to process a specific video
 
-5. **First Run**:
+4. **First Run**:
    - The first run initializes the state with the latest video
    - Subsequent runs will process any new uploads
 

@@ -47,23 +47,11 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Setup YouTube cookies
-        env:
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
-        run: |
-          if [ -n "$YOUTUBE_COOKIES" ]; then
-            echo "$YOUTUBE_COOKIES" > /tmp/youtube_cookies.txt
-            echo "YouTube cookies configured"
-          else
-            echo "No YouTube cookies configured (optional)"
-          fi
-
       - name: Check for new videos
         id: monitor
         if: ${{ !inputs.force_url }}
         env:
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
-          YT_COOKIES_FILE: /tmp/youtube_cookies.txt
         run: |
           set +e  # Don't exit on error
           python src/monitor.py 2>&1 | tee monitor_output.txt
@@ -99,30 +87,38 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Getting metadata for: $VIDEO_URL"
 
-          # Build yt-dlp command with cookies if available
-          YT_DLP_ARGS="--extractor-args youtube:player_client=web"
-          if [ -f /tmp/youtube_cookies.txt ]; then
-            YT_DLP_ARGS="$YT_DLP_ARGS --cookies /tmp/youtube_cookies.txt"
+          # Extract video ID from URL
+          VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
+          echo "Video ID: $VIDEO_ID"
+
+          # Get title from YouTube oEmbed API (no auth required)
+          OEMBED_URL="https://www.youtube.com/oembed?url=${VIDEO_URL}&format=json"
+          echo "Fetching oEmbed: $OEMBED_URL"
+          OEMBED_JSON=$(curl -s "$OEMBED_URL")
+          echo "oEmbed response: $OEMBED_JSON"
+
+          TITLE=$(echo "$OEMBED_JSON" | jq -r '.title')
+          echo "Title: $TITLE"
+
+          # Try to parse date from title (common formats: "Jan. 6, 2026", "January 6, 2026", "2026-01-06")
+          # Extract date if present, otherwise no date prefix
+          FORMATTED_DATE=""
+
+          # Try "Mon. D, YYYY" or "Month D, YYYY" format
+          if echo "$TITLE" | grep -qP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}'; then
+            DATE_STR=$(echo "$TITLE" | grep -oP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}' | head -1)
+            FORMATTED_DATE=$(date -d "$DATE_STR" +%Y-%m-%d 2>/dev/null || echo "")
           fi
 
-          # Get video metadata (show errors)
-          VIDEO_INFO=$(yt-dlp $YT_DLP_ARGS --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL")
-          echo "Raw video info: $VIDEO_INFO"
+          # Try "YYYY-MM-DD" format
+          if [ -z "$FORMATTED_DATE" ] && echo "$TITLE" | grep -qP '\d{4}-\d{2}-\d{2}'; then
+            FORMATTED_DATE=$(echo "$TITLE" | grep -oP '\d{4}-\d{2}-\d{2}' | head -1)
+          fi
 
-          VIDEO_ID=$(echo "$VIDEO_INFO" | cut -f1)
-          TITLE=$(echo "$VIDEO_INFO" | cut -f2)
-          UPLOAD_DATE=$(echo "$VIDEO_INFO" | cut -f3)
-
-          echo "Video ID: $VIDEO_ID"
-          echo "Title: $TITLE"
-          echo "Upload date: $UPLOAD_DATE"
-
-          # Format date as YYYY-MM-DD (handle empty/missing date)
-          if [ -n "$UPLOAD_DATE" ] && [ ${#UPLOAD_DATE} -ge 8 ]; then
-            FORMATTED_DATE="${UPLOAD_DATE:0:4}-${UPLOAD_DATE:4:2}-${UPLOAD_DATE:6:2}"
+          if [ -n "$FORMATTED_DATE" ]; then
+            echo "Parsed date: $FORMATTED_DATE"
           else
-            FORMATTED_DATE=$(date +%Y-%m-%d)
-            echo "Warning: Using today's date as fallback"
+            echo "No date found in title"
           fi
 
           # Sanitize title for filename
@@ -133,7 +129,12 @@ jobs:
             SAFE_TITLE="$VIDEO_ID"
           fi
 
-          FILENAME="sermon_${FORMATTED_DATE}_${SAFE_TITLE}"
+          # Build filename with or without date
+          if [ -n "$FORMATTED_DATE" ]; then
+            FILENAME="sermon_${FORMATTED_DATE}_${SAFE_TITLE}"
+          else
+            FILENAME="sermon_${SAFE_TITLE}"
+          fi
 
           echo "Filename: $FILENAME"
           echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
@@ -145,14 +146,7 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Downloading: $VIDEO_URL"
           mkdir -p output
-
-          # Build yt-dlp command with cookies if available
-          YT_DLP_ARGS="--extractor-args youtube:player_client=web"
-          if [ -f /tmp/youtube_cookies.txt ]; then
-            YT_DLP_ARGS="$YT_DLP_ARGS --cookies /tmp/youtube_cookies.txt"
-          fi
-
-          yt-dlp $YT_DLP_ARGS -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
+          yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
 
       - name: Transcribe audio
         if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'

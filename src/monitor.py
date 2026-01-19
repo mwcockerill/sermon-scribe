@@ -51,23 +51,14 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
         channel_url = f"https://www.youtube.com/@{channel_id}/videos"
 
     try:
-        cmd = [
-            "yt-dlp",
-            "--flat-playlist",
-            "--print", "%(id)s\t%(title)s\t%(upload_date)s",
-            "--playlist-end", str(limit),
-            "--extractor-args", "youtube:player_client=web",
-        ]
-
-        # Add cookies file if available (helps avoid bot detection)
-        cookies_file = os.environ.get("YT_COOKIES_FILE")
-        if cookies_file and Path(cookies_file).exists():
-            cmd.extend(["--cookies", cookies_file])
-
-        cmd.append(channel_url)
-
         result = subprocess.run(
-            cmd,
+            [
+                "yt-dlp",
+                "--flat-playlist",
+                "--print", "%(id)s\t%(title)s\t%(upload_date)s",
+                "--playlist-end", str(limit),
+                channel_url
+            ],
             capture_output=True,
             text=True,
             timeout=60
