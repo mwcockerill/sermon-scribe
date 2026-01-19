@@ -1,0 +1,28 @@
+title: Sermon Archive
+description: Sermon transcripts from Atonement Chicago
+baseurl: "/sermon-scribe"
+url: "https://mwcockerill.github.io"
+
+# Collections
+collections:
+  sermons:
+    output: true
+    permalink: /sermons/:title/
+
+# Build settings
+markdown: kramdown
+theme: minima
+
+# Default front matter
+defaults:
+  - scope:
+      path: ""
+      type: "sermons"
+    values:
+      layout: "sermon"
+
+# Exclude from build
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock

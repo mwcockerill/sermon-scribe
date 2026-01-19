@@ -24,6 +24,7 @@ from cleanup import cleanup_sermon
 
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
+JEKYLL_DIR = Path(__file__).parent.parent / "docs" / "_sermons"
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 GPT_MODEL = os.environ.get("GPT_MODEL", "gpt-4o-mini")
 
@@ -39,6 +40,39 @@ def get_existing_sermons() -> set[str]:
         existing.add(f.stem)
 
     return existing
+
+
+def generate_jekyll_post(video: dict, content: str, date_str: str) -> Path:
+    """Generate a Jekyll-compatible markdown file for the sermon."""
+    JEKYLL_DIR.mkdir(parents=True, exist_ok=True)
+
+    title = video.get("title", "Untitled")
+    video_id = video.get("video_id", "")
+    safe_title = video.get("safe_title", sanitize_filename(title))
+
+    # Jekyll filename format: YYYY-MM-DD-title.md
+    jekyll_filename = f"{date_str}-{safe_title.lower()}.md"
+    jekyll_path = JEKYLL_DIR / jekyll_filename
+
+    # Get first paragraph as description (for social sharing)
+    paragraphs = content.strip().split("\n\n")
+    description = paragraphs[0][:200] + "..." if paragraphs else ""
+
+    # Build front matter
+    front_matter = f"""---
+title: "{title}"
+date: {date_str}
+youtube_id: "{video_id}"
+description: "{description.replace('"', "'")}"
+---
+
+"""
+
+    with open(jekyll_path, "w") as f:
+        f.write(front_matter)
+        f.write(content)
+
+    return jekyll_path
 
 
 def filename_for_video(video: dict) -> str:
@@ -164,6 +198,27 @@ def process_video(video: dict) -> bool:
         f.write(cleaned)
 
     print(f"  Saved: {output_file.name}")
+
+    # 6. Generate Jekyll page
+    # Extract date for Jekyll filename
+    upload_date = video.get("upload_date", "")
+    if not upload_date or upload_date == "NA":
+        # Try to extract from title
+        title = video.get("title", "")
+        match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})', title)
+        if match:
+            month_map = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+                         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+                         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+            month = month_map[match.group(1)]
+            day = match.group(2).zfill(2)
+            year = match.group(3)
+            upload_date = f"{year}-{month}-{day}"
+        else:
+            upload_date = datetime.now().strftime("%Y-%m-%d")
+
+    jekyll_file = generate_jekyll_post(video, cleaned, upload_date)
+    print(f"  Jekyll: {jekyll_file.name}")
 
     # Cleanup temp files
     audio_file.unlink(missing_ok=True)
@@ -322,8 +377,10 @@ def main():
     # Push if requested
     if args.push and processed_files:
         print("\nPushing to GitHub...")
+        # Include both output/*.txt and docs/_sermons/*.md
+        all_files = processed_files + list(JEKYLL_DIR.glob("*.md"))
         message = f"Add {len(processed_files)} sermon transcript(s)"
-        git_push(processed_files, message)
+        git_push(all_files, message)
 
 
 if __name__ == "__main__":
