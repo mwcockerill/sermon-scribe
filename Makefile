@@ -13,13 +13,17 @@ TRANSCRIPT ?= audio_transcript.json
 # YouTube channel ID for monitoring
 CHANNEL_ID ?= $(YOUTUBE_CHANNEL_ID)
 
-.PHONY: install download transcribe segment cleanup monitor clean help
+# Days to look back for catch-up
+DAYS ?= 7
+
+.PHONY: install download transcribe segment cleanup monitor catch-up catch-up-push clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
 	@echo ""
 	@echo "  make install              Install Python dependencies"
 	@echo "  make monitor              Check for new videos on YouTube channel"
+	@echo "  make catch-up             Process recent videos missing transcripts (local)"
 	@echo "  make download URL=<url>   Download audio from YouTube video"
 	@echo "  make transcribe           Transcribe the downloaded audio"
 	@echo "  make segment              Find sermon boundaries in transcript"
@@ -32,11 +36,15 @@ help:
 	@echo "  MODEL=base                Whisper model (tiny/base/small/medium/large)"
 	@echo "  GPT=gpt-4o-mini           OpenAI model for segmentation/cleanup"
 	@echo "  CHANNEL_ID=UC...          YouTube channel ID for monitoring"
+	@echo "  DAYS=7                    Days to look back for catch-up"
 	@echo ""
 	@echo "Requires: OPENAI_API_KEY environment variable for segmentation/cleanup"
 	@echo ""
-	@echo "Example:"
+	@echo "Examples:"
 	@echo "  make full URL=https://www.youtube.com/watch?v=VIDEO_ID"
+	@echo "  make catch-up             Process last 7 days of videos"
+	@echo "  make catch-up DAYS=14     Process last 14 days of videos"
+	@echo "  make catch-up --push      Process and push to GitHub"
 
 install:
 	pip3 install -r requirements.txt
@@ -46,6 +54,18 @@ ifndef CHANNEL_ID
 	$(error CHANNEL_ID is required. Usage: make monitor CHANNEL_ID=UC...)
 endif
 	python3 src/monitor.py $(CHANNEL_ID)
+
+catch-up:
+ifndef CHANNEL_ID
+	$(error CHANNEL_ID is required. Usage: make catch-up CHANNEL_ID=UC... or set YOUTUBE_CHANNEL_ID)
+endif
+	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) python3 src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS)
+
+catch-up-push:
+ifndef CHANNEL_ID
+	$(error CHANNEL_ID is required. Usage: make catch-up-push CHANNEL_ID=UC...)
+endif
+	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) python3 src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS) --push
 
 download:
 ifndef URL

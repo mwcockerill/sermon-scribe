@@ -143,6 +143,12 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
     for video in videos:
         if video["video_id"] == last_video_id:
             break
+
+        # Skip daily videos (e.g., daily devotionals)
+        if "Daily" in video.get("title", ""):
+            print(f"Skipping daily video: {video['title']}")
+            continue
+
         new_videos.append(video)
 
     return new_videos
