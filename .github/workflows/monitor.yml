@@ -1,0 +1,140 @@
+name: Monitor YouTube Channel
+
+on:
+  schedule:
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+    # Allow manual trigger
+    inputs:
+      force_url:
+        description: 'Force process a specific video URL (optional)'
+        required: false
+        type: string
+
+env:
+  WHISPER_MODEL: base
+  GPT_MODEL: gpt-4o-mini
+
+jobs:
+  check-and-process:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check for new videos
+        id: monitor
+        if: ${{ !inputs.force_url }}
+        env:
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+        run: |
+          python src/monitor.py > monitor_output.txt 2>&1
+          cat monitor_output.txt
+
+          if grep -q "Found .* new video" monitor_output.txt; then
+            echo "new_video=true" >> $GITHUB_OUTPUT
+            VIDEO_URL=$(grep -oP 'https://www.youtube.com/watch\?v=\K[^ ]+' monitor_output.txt | head -1)
+            echo "video_url=https://www.youtube.com/watch?v=${VIDEO_URL}" >> $GITHUB_OUTPUT
+            VIDEO_ID=$(echo $VIDEO_URL | head -1)
+            echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
+          else
+            echo "new_video=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set forced URL
+        id: forced
+        if: ${{ inputs.force_url }}
+        run: |
+          echo "new_video=true" >> $GITHUB_OUTPUT
+          echo "video_url=${{ inputs.force_url }}" >> $GITHUB_OUTPUT
+          VIDEO_ID=$(echo "${{ inputs.force_url }}" | grep -oP 'v=\K[^&]+')
+          echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
+
+      - name: Download audio
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        run: |
+          VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
+          echo "Downloading: $VIDEO_URL"
+          mkdir -p output
+          yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
+
+      - name: Transcribe audio
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        run: |
+          echo "Transcribing with Whisper ($WHISPER_MODEL model)..."
+          python src/transcribe.py output/audio.mp3 $WHISPER_MODEL
+
+      - name: Segment sermon
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Segmenting with GPT ($GPT_MODEL)..."
+          python src/segment.py audio_transcript.json $GPT_MODEL
+
+      - name: Cleanup transcript
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Cleaning up transcript..."
+          VIDEO_ID="${{ steps.monitor.outputs.video_id || steps.forced.outputs.video_id }}"
+          python src/cleanup.py audio_sermon.json $GPT_MODEL "output/sermon_${VIDEO_ID}.txt"
+
+      - name: Update state
+        if: steps.monitor.outputs.new_video == 'true'
+        run: |
+          VIDEO_ID="${{ steps.monitor.outputs.video_id }}"
+          python -c "
+          import json
+          from datetime import datetime
+          state = {'last_video_id': '${VIDEO_ID}', 'last_check': datetime.utcnow().isoformat()}
+          with open('state.json', 'w') as f:
+              json.dump(state, f, indent=2)
+          "
+
+      - name: Commit results
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+          VIDEO_ID="${{ steps.monitor.outputs.video_id || steps.forced.outputs.video_id }}"
+
+          # Add the sermon transcript
+          git add "output/sermon_${VIDEO_ID}.txt" || true
+          git add state.json || true
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Add sermon transcript for video ${VIDEO_ID}"
+            git push
+          fi
+
+      - name: Upload artifact
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sermon-transcript
+          path: output/sermon_*.txt
+          retention-days: 30

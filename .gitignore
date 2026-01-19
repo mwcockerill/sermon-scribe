@@ -1,5 +1,5 @@
-# Output files
-output/
+# Output files (keep sermon transcripts, ignore the rest)
+output/audio.*
 *_transcript.json
 *_sermon.json
 

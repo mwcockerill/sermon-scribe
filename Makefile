@@ -10,13 +10,16 @@ GPT ?= gpt-4o-mini
 INPUT ?= output/audio.mp3
 # Transcript file for segmentation
 TRANSCRIPT ?= audio_transcript.json
+# YouTube channel ID for monitoring
+CHANNEL_ID ?= $(YOUTUBE_CHANNEL_ID)
 
-.PHONY: install download transcribe segment cleanup clean help
+.PHONY: install download transcribe segment cleanup monitor clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
 	@echo ""
 	@echo "  make install              Install Python dependencies"
+	@echo "  make monitor              Check for new videos on YouTube channel"
 	@echo "  make download URL=<url>   Download audio from YouTube video"
 	@echo "  make transcribe           Transcribe the downloaded audio"
 	@echo "  make segment              Find sermon boundaries in transcript"
@@ -28,6 +31,7 @@ help:
 	@echo "Options:"
 	@echo "  MODEL=base                Whisper model (tiny/base/small/medium/large)"
 	@echo "  GPT=gpt-4o-mini           OpenAI model for segmentation/cleanup"
+	@echo "  CHANNEL_ID=UC...          YouTube channel ID for monitoring"
 	@echo ""
 	@echo "Requires: OPENAI_API_KEY environment variable for segmentation/cleanup"
 	@echo ""
@@ -36,6 +40,12 @@ help:
 
 install:
 	pip3 install -r requirements.txt
+
+monitor:
+ifndef CHANNEL_ID
+	$(error CHANNEL_ID is required. Usage: make monitor CHANNEL_ID=UC...)
+endif
+	python3 src/monitor.py $(CHANNEL_ID)
 
 download:
 ifndef URL

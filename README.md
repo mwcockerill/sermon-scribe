@@ -12,18 +12,20 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
 │  YouTube        │     │   Download   │     │  Transcribe │
 │  Monitor        │────▶│   (yt-dlp)   │────▶│  (Whisper)  │
-│  (YT Data API)  │     │              │     │             │
+│  (RSS Feed)     │     │              │     │             │
 └─────────────────┘     └──────────────┘     └─────────────┘
                                                     │
                                                     ▼
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
 │  Output         │     │   Cleanup    │     │  Segment    │
-│  (JSON/MD)      │◀────│   (OpenAI)   │◀────│  (OpenAI)   │
+│  (.txt)         │◀────│   (OpenAI)   │◀────│  (OpenAI)   │
 │                 │     │              │     │             │
 └─────────────────┘     └──────────────┘     └─────────────┘
 ```
 
 ## Setup
+
+### Local Development
 
 1. Clone the repository
 2. Install dependencies:
@@ -39,23 +41,56 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
    OPENAI_API_KEY=sk-your-key-here
    ```
 
+### GitHub Actions (Automated Monitoring)
+
+To enable automatic monitoring and processing:
+
+1. **Add GitHub Secrets** (Settings → Secrets and variables → Actions):
+   - `OPENAI_API_KEY` - Your OpenAI API key
+   - `YOUTUBE_CHANNEL_ID` - The channel ID to monitor
+
+2. **Find Your Channel ID**:
+   - Go to the YouTube channel
+   - View page source and search for `channelId`
+   - Or use a service like [Comment Picker](https://commentpicker.com/youtube-channel-id.php)
+
+3. **Enable the Workflow**:
+   - The workflow runs every 30 minutes automatically
+   - You can also trigger it manually from Actions tab
+   - Use "Force URL" input to process a specific video
+
+4. **First Run**:
+   - The first run initializes the state with the latest video
+   - Subsequent runs will process any new uploads
+
 ## Usage
+
+### Manual (Local)
 
 ```bash
 # See all commands
 make help
 
-# Download, transcribe, and segment in one step
-make full URL=https://www.youtube.com/watch?v=VIDEO_ID
+# Full pipeline: download, transcribe, segment, cleanup
+make full "URL=https://www.youtube.com/watch?v=VIDEO_ID"
 
 # Or run steps individually:
-make download URL=https://www.youtube.com/watch?v=VIDEO_ID
+make download "URL=https://www.youtube.com/watch?v=VIDEO_ID"
 make transcribe
 make segment
+make cleanup
 
-# Use different models
-make full URL=... MODEL=large GPT=gpt-4o
+# Check for new videos (without processing)
+python src/monitor.py YOUR_CHANNEL_ID
 ```
+
+### Automated (GitHub Actions)
+
+The workflow automatically:
+1. Checks for new videos every 30 minutes
+2. Downloads and processes new uploads
+3. Commits the cleaned transcript to `output/sermon_VIDEOID.txt`
+4. Updates `state.json` with the last processed video
 
 ### Options
 
@@ -66,14 +101,14 @@ make full URL=... MODEL=large GPT=gpt-4o
 
 ## Pipeline Stages
 
-### 1. Monitor (coming soon)
-- Poll YouTube channel for new video uploads
-- Options: YouTube Data API v3 or RSS feed
-- Trigger download when new video detected
+### 1. Monitor
+- Poll YouTube channel RSS feed for new uploads
+- Compare against last processed video ID
+- Trigger pipeline when new video detected
 
 ### 2. Download
 - Download audio from YouTube video using `yt-dlp`
-- Extract audio only (no video needed for transcription)
+- Extract audio only (MP3) to save space
 - Store temporarily for processing
 
 ### 3. Transcribe
@@ -87,14 +122,14 @@ make full URL=... MODEL=large GPT=gpt-4o
 - Look for: extended teaching, scripture references, single speaker
 - Exclude: announcements, worship music, prayers, offering
 
-### 5. Cleanup (coming soon)
+### 5. Cleanup
 - Polish the extracted sermon transcript
-- Fix punctuation and paragraph breaks
+- Fix transcription errors (e.g., "Maygai" → "Magi")
+- Add proper punctuation and paragraph breaks
 - Remove filler words and false starts
-- Format for readability
 
 ### 6. Output
-- Generate final transcript (JSON)
+- Generate final transcript as plain text
 - Ready for upload to church website
 
 ## Tech Stack
@@ -103,7 +138,8 @@ make full URL=... MODEL=large GPT=gpt-4o
 - **Video Download:** yt-dlp
 - **Transcription:** OpenAI Whisper (local)
 - **AI Processing:** OpenAI API (GPT-4o-mini)
-- **YouTube Monitoring:** YouTube Data API v3 / RSS (coming soon)
+- **Monitoring:** YouTube RSS feeds
+- **Automation:** GitHub Actions
 
 ## Project Structure
 
@@ -112,14 +148,20 @@ sermon-scribe/
 ├── README.md
 ├── Makefile
 ├── requirements.txt
+├── state.json              # Tracks last processed video
 ├── .env.example
-├── .env              # Your local config (gitignored)
+├── .env                    # Local config (gitignored)
+├── .github/
+│   └── workflows/
+│       └── monitor.yml     # GitHub Actions workflow
 ├── src/
 │   ├── __init__.py
-│   ├── transcribe.py   # Whisper transcription
-│   └── segment.py      # Sermon boundary detection (OpenAI)
-├── output/             # Generated transcripts (gitignored)
-└── config/
+│   ├── transcribe.py       # Whisper transcription
+│   ├── segment.py          # Sermon boundary detection
+│   ├── cleanup.py          # Transcript polishing
+│   └── monitor.py          # YouTube RSS monitoring
+└── output/
+    └── sermon_*.txt        # Generated transcripts
 ```
 
 ## Roadmap
@@ -127,12 +169,12 @@ sermon-scribe/
 - [x] Set up project structure and dependencies
 - [x] Implement transcription module (Whisper)
 - [x] Implement segmentation module (OpenAI)
-- [ ] Implement cleanup module (OpenAI)
-- [ ] Implement download module (Python wrapper)
-- [ ] Implement YouTube monitoring
-- [ ] Add configuration management
-- [ ] End-to-end pipeline integration
-- [ ] Testing with real service videos
+- [x] Implement cleanup module (OpenAI)
+- [x] Implement YouTube monitoring (RSS)
+- [x] GitHub Actions automation
+- [ ] Add configuration management (YAML)
+- [ ] Support for multiple channels
+- [ ] Web interface for browsing transcripts
 
 ## License
 
