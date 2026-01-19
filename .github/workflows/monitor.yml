@@ -46,8 +46,15 @@ jobs:
         env:
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
         run: |
-          python src/monitor.py > monitor_output.txt 2>&1
-          cat monitor_output.txt
+          set +e  # Don't exit on error
+          python src/monitor.py 2>&1 | tee monitor_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Monitor script failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
 
           if grep -q "Found .* new video" monitor_output.txt; then
             echo "new_video=true" >> $GITHUB_OUTPUT
