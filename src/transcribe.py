@@ -5,8 +5,18 @@ Transcribes audio/video files and returns timestamped segments
 for downstream processing (segmentation, cleanup).
 """
 
+import torch
 import whisper
 from pathlib import Path
+
+
+def get_device() -> str:
+    """Get the best available device for Whisper."""
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 def transcribe(
@@ -32,8 +42,9 @@ def transcribe(
     if not audio_path.exists():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-    print(f"Loading Whisper model: {model_name}")
-    model = whisper.load_model(model_name)
+    device = get_device()
+    print(f"Loading Whisper model: {model_name} (device: {device})")
+    model = whisper.load_model(model_name, device=device)
 
     print(f"Transcribing: {audio_path.name}")
     result = model.transcribe(
