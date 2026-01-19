@@ -22,7 +22,7 @@ CHANNEL_ID ?= $(YOUTUBE_CHANNEL_ID)
 # Days to look back for catch-up
 DAYS ?= 7
 
-.PHONY: install download transcribe segment cleanup monitor catch-up catch-up-push clean help
+.PHONY: install download transcribe segment cleanup monitor catch-up clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
@@ -48,9 +48,8 @@ help:
 	@echo ""
 	@echo "Examples:"
 	@echo "  make full URL=https://www.youtube.com/watch?v=VIDEO_ID"
-	@echo "  make catch-up             Process last 7 days of videos"
-	@echo "  make catch-up DAYS=14     Process last 14 days of videos"
-	@echo "  make catch-up --push      Process and push to GitHub"
+	@echo "  make catch-up             Process last 7 days and push to GitHub"
+	@echo "  make catch-up DAYS=14     Process last 14 days and push to GitHub"
 
 install:
 	pip3 install -r requirements.txt
@@ -64,12 +63,6 @@ endif
 catch-up:
 ifndef CHANNEL_ID
 	$(error CHANNEL_ID is required. Usage: make catch-up CHANNEL_ID=UC... or set YOUTUBE_CHANNEL_ID)
-endif
-	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) python3 src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS)
-
-catch-up-push:
-ifndef CHANNEL_ID
-	$(error CHANNEL_ID is required. Usage: make catch-up-push CHANNEL_ID=UC...)
 endif
 	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) python3 src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS) --push
 
