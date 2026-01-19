@@ -1,6 +1,7 @@
 # Output files
 output/
 *_transcript.json
+*_sermon.json
 
 # Python
 __pycache__/

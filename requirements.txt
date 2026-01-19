@@ -7,10 +7,11 @@ yt-dlp
 openai-whisper
 
 # AI processing (segmentation & cleanup)
-anthropic
+openai
 
 # YouTube monitoring
 google-api-python-client
 
 # Utilities
 pyyaml
+python-dotenv

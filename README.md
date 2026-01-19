@@ -18,14 +18,55 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
                                                     ▼
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
 │  Output         │     │   Cleanup    │     │  Segment    │
-│  (JSON/MD)      │◀────│   (Claude)   │◀────│  (Claude)   │
+│  (JSON/MD)      │◀────│   (OpenAI)   │◀────│  (OpenAI)   │
 │                 │     │              │     │             │
 └─────────────────┘     └──────────────┘     └─────────────┘
 ```
 
+## Setup
+
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   make install
+   ```
+3. Create your environment file:
+   ```bash
+   cp .env.example .env
+   ```
+4. Add your OpenAI API key to `.env`:
+   ```
+   OPENAI_API_KEY=sk-your-key-here
+   ```
+
+## Usage
+
+```bash
+# See all commands
+make help
+
+# Download, transcribe, and segment in one step
+make full URL=https://www.youtube.com/watch?v=VIDEO_ID
+
+# Or run steps individually:
+make download URL=https://www.youtube.com/watch?v=VIDEO_ID
+make transcribe
+make segment
+
+# Use different models
+make full URL=... MODEL=large GPT=gpt-4o
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MODEL` | `base` | Whisper model: tiny, base, small, medium, large |
+| `GPT` | `gpt-4o-mini` | OpenAI model: gpt-4o-mini, gpt-4o |
+
 ## Pipeline Stages
 
-### 1. Monitor
+### 1. Monitor (coming soon)
 - Poll YouTube channel for new video uploads
 - Options: YouTube Data API v3 or RSS feed
 - Trigger download when new video detected
@@ -36,76 +77,62 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
 - Store temporarily for processing
 
 ### 3. Transcribe
-- Transcribe audio using OpenAI Whisper
+- Transcribe audio using OpenAI Whisper (runs locally)
 - Output includes timestamps for segmentation
 - Full service transcript with timing data
 
 ### 4. Segment
-- Send transcript to Claude API
+- Send transcript to OpenAI API
 - Identify sermon start/end based on content analysis
 - Look for: extended teaching, scripture references, single speaker
 - Exclude: announcements, worship music, prayers, offering
 
-### 5. Cleanup
+### 5. Cleanup (coming soon)
 - Polish the extracted sermon transcript
 - Fix punctuation and paragraph breaks
 - Remove filler words and false starts
 - Format for readability
 
 ### 6. Output
-- Generate final transcript (Markdown or JSON)
+- Generate final transcript (JSON)
 - Ready for upload to church website
 
 ## Tech Stack
 
 - **Language:** Python
 - **Video Download:** yt-dlp
-- **Transcription:** OpenAI Whisper
-- **AI Processing:** Claude API (Anthropic)
-- **YouTube Monitoring:** YouTube Data API v3 / RSS
-
-## Dependencies
-
-```
-yt-dlp
-openai-whisper
-anthropic
-google-api-python-client
-```
+- **Transcription:** OpenAI Whisper (local)
+- **AI Processing:** OpenAI API (GPT-4o-mini)
+- **YouTube Monitoring:** YouTube Data API v3 / RSS (coming soon)
 
 ## Project Structure
 
 ```
 sermon-scribe/
 ├── README.md
+├── Makefile
 ├── requirements.txt
+├── .env.example
+├── .env              # Your local config (gitignored)
 ├── src/
-│   ├── monitor.py      # YouTube channel monitoring
-│   ├── download.py     # Video/audio download
+│   ├── __init__.py
 │   ├── transcribe.py   # Whisper transcription
-│   ├── segment.py      # Sermon boundary detection
-│   ├── cleanup.py      # Transcript polishing
-│   └── main.py         # Pipeline orchestration
-├── output/             # Generated transcripts
+│   └── segment.py      # Sermon boundary detection (OpenAI)
+├── output/             # Generated transcripts (gitignored)
 └── config/
-    └── config.yaml     # API keys, channel ID, settings
 ```
 
 ## Roadmap
 
-- [ ] Set up project structure and dependencies
-- [ ] Implement transcription module (Whisper)
-- [ ] Implement segmentation module (Claude)
-- [ ] Implement cleanup module (Claude)
-- [ ] Implement download module (yt-dlp)
+- [x] Set up project structure and dependencies
+- [x] Implement transcription module (Whisper)
+- [x] Implement segmentation module (OpenAI)
+- [ ] Implement cleanup module (OpenAI)
+- [ ] Implement download module (Python wrapper)
 - [ ] Implement YouTube monitoring
 - [ ] Add configuration management
 - [ ] End-to-end pipeline integration
 - [ ] Testing with real service videos
-
-## Usage
-
-*(Coming soon)*
 
 ## License
 
