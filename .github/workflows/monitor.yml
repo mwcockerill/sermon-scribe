@@ -40,11 +40,17 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Setup YouTube cookies
+        if: ${{ secrets.YOUTUBE_COOKIES != '' }}
+        run: |
+          echo "${{ secrets.YOUTUBE_COOKIES }}" > /tmp/youtube_cookies.txt
+
       - name: Check for new videos
         id: monitor
         if: ${{ !inputs.force_url }}
         env:
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+          YT_COOKIES_FILE: ${{ secrets.YOUTUBE_COOKIES != '' && '/tmp/youtube_cookies.txt' || '' }}
         run: |
           set +e  # Don't exit on error
           python src/monitor.py 2>&1 | tee monitor_output.txt
@@ -80,8 +86,14 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Getting metadata for: $VIDEO_URL"
 
+          # Build yt-dlp command with cookies if available
+          YT_DLP_ARGS="--extractor-args youtube:player_client=web"
+          if [ -f /tmp/youtube_cookies.txt ]; then
+            YT_DLP_ARGS="$YT_DLP_ARGS --cookies /tmp/youtube_cookies.txt"
+          fi
+
           # Get video metadata (show errors)
-          VIDEO_INFO=$(yt-dlp --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL")
+          VIDEO_INFO=$(yt-dlp $YT_DLP_ARGS --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL")
           echo "Raw video info: $VIDEO_INFO"
 
           VIDEO_ID=$(echo "$VIDEO_INFO" | cut -f1)
@@ -120,7 +132,14 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Downloading: $VIDEO_URL"
           mkdir -p output
-          yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
+
+          # Build yt-dlp command with cookies if available
+          YT_DLP_ARGS="--extractor-args youtube:player_client=web"
+          if [ -f /tmp/youtube_cookies.txt ]; then
+            YT_DLP_ARGS="$YT_DLP_ARGS --cookies /tmp/youtube_cookies.txt"
+          fi
+
+          yt-dlp $YT_DLP_ARGS -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
 
       - name: Transcribe audio
         if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'

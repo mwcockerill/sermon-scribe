@@ -12,7 +12,7 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
 │  YouTube        │     │   Download   │     │  Transcribe │
 │  Monitor        │────▶│   (yt-dlp)   │────▶│  (Whisper)  │
-│  (RSS Feed)     │     │              │     │             │
+│  (yt-dlp)       │     │              │     │             │
 └─────────────────┘     └──────────────┘     └─────────────┘
                                                     │
                                                     ▼
@@ -48,18 +48,26 @@ To enable automatic monitoring and processing:
 1. **Add GitHub Secrets** (Settings → Secrets and variables → Actions):
    - `OPENAI_API_KEY` - Your OpenAI API key
    - `YOUTUBE_CHANNEL_ID` - The channel ID to monitor
+   - `YOUTUBE_COOKIES` - (Optional) YouTube cookies to avoid bot detection
 
 2. **Find Your Channel ID**:
    - Go to the YouTube channel
    - View page source and search for `channelId`
    - Or use a service like [Comment Picker](https://commentpicker.com/youtube-channel-id.php)
 
-3. **Enable the Workflow**:
-   - The workflow runs every 30 minutes automatically
+3. **Export YouTube Cookies** (Recommended):
+   YouTube may block requests from GitHub Actions datacenter IPs. To avoid this:
+   - Install a browser extension like "Get cookies.txt LOCALLY"
+   - Go to youtube.com while logged in
+   - Export cookies in Netscape format
+   - Add the entire cookie file contents as `YOUTUBE_COOKIES` secret
+
+4. **Enable the Workflow**:
+   - The workflow runs at 8am and 8pm UTC automatically
    - You can also trigger it manually from Actions tab
    - Use "Force URL" input to process a specific video
 
-4. **First Run**:
+5. **First Run**:
    - The first run initializes the state with the latest video
    - Subsequent runs will process any new uploads
 
@@ -87,9 +95,9 @@ python src/monitor.py YOUR_CHANNEL_ID
 ### Automated (GitHub Actions)
 
 The workflow automatically:
-1. Checks for new videos every 30 minutes
+1. Checks for new videos at 8am and 8pm UTC
 2. Downloads and processes new uploads
-3. Commits the cleaned transcript to `output/sermon_VIDEOID.txt`
+3. Commits the cleaned transcript to `output/sermon_DATE_TITLE.txt`
 4. Updates `state.json` with the last processed video
 
 ### Options
@@ -102,7 +110,7 @@ The workflow automatically:
 ## Pipeline Stages
 
 ### 1. Monitor
-- Poll YouTube channel RSS feed for new uploads
+- Check YouTube channel for new uploads using yt-dlp
 - Compare against last processed video ID
 - Trigger pipeline when new video detected
 
@@ -138,7 +146,7 @@ The workflow automatically:
 - **Video Download:** yt-dlp
 - **Transcription:** OpenAI Whisper (local)
 - **AI Processing:** OpenAI API (GPT-4o-mini)
-- **Monitoring:** YouTube RSS feeds
+- **Monitoring:** yt-dlp (channel video listing)
 - **Automation:** GitHub Actions
 
 ## Project Structure
@@ -159,7 +167,7 @@ sermon-scribe/
 │   ├── transcribe.py       # Whisper transcription
 │   ├── segment.py          # Sermon boundary detection
 │   ├── cleanup.py          # Transcript polishing
-│   └── monitor.py          # YouTube RSS monitoring
+│   └── monitor.py          # YouTube channel monitoring
 └── output/
     └── sermon_*.txt        # Generated transcripts
 ```
