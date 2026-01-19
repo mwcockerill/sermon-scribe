@@ -2,8 +2,8 @@ name: Monitor YouTube Channel
 
 on:
   schedule:
-    # Run every 30 minutes
-    - cron: '*/30 * * * *'
+    # Run at 8am and 8pm UTC
+    - cron: '0 8,20 * * *'
   workflow_dispatch:
     # Allow manual trigger
     inputs:
@@ -83,15 +83,28 @@ jobs:
           python src/transcribe.py output/audio.mp3 $WHISPER_MODEL
 
       - name: Segment sermon
+        id: segment
         if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Segmenting with GPT ($GPT_MODEL)..."
+          set +e  # Don't exit on error
           python src/segment.py audio_transcript.json $GPT_MODEL
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -eq 2 ]; then
+            echo "No sermon found in video - skipping cleanup"
+            echo "sermon_found=false" >> $GITHUB_OUTPUT
+          elif [ $EXIT_CODE -ne 0 ]; then
+            echo "Segmentation failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          else
+            echo "sermon_found=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Cleanup transcript
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.segment.outputs.sermon_found == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -118,21 +131,28 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
           VIDEO_ID="${{ steps.monitor.outputs.video_id || steps.forced.outputs.video_id }}"
+          SERMON_FOUND="${{ steps.segment.outputs.sermon_found }}"
 
-          # Add the sermon transcript
-          git add "output/sermon_${VIDEO_ID}.txt" || true
+          # Add the sermon transcript if it exists
+          if [ "$SERMON_FOUND" == "true" ]; then
+            git add "output/sermon_${VIDEO_ID}.txt" || true
+          fi
           git add state.json || true
 
           # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Add sermon transcript for video ${VIDEO_ID}"
+            if [ "$SERMON_FOUND" == "true" ]; then
+              git commit -m "Add sermon transcript for video ${VIDEO_ID}"
+            else
+              git commit -m "Update state: no sermon found in video ${VIDEO_ID}"
+            fi
             git push
           fi
 
       - name: Upload artifact
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.segment.outputs.sermon_found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sermon-transcript

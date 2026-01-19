@@ -179,3 +179,10 @@ if __name__ == "__main__":
         with open(output_file, "w") as f:
             json.dump(output, f, indent=2)
         print(f"\nSermon saved to: {output_file}")
+    else:
+        print("\n" + "=" * 60)
+        print("NO SERMON FOUND")
+        print("=" * 60)
+        print(f"Reason: {result.get('reasoning', 'Unknown')}")
+        print("\nSkipping cleanup step. Video may not contain a sermon.")
+        sys.exit(2)  # Exit code 2 = no sermon found (distinguishes from error)
