@@ -41,16 +41,22 @@ jobs:
           pip install -r requirements.txt
 
       - name: Setup YouTube cookies
-        if: ${{ secrets.YOUTUBE_COOKIES != '' }}
+        env:
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: |
-          echo "${{ secrets.YOUTUBE_COOKIES }}" > /tmp/youtube_cookies.txt
+          if [ -n "$YOUTUBE_COOKIES" ]; then
+            echo "$YOUTUBE_COOKIES" > /tmp/youtube_cookies.txt
+            echo "YouTube cookies configured"
+          else
+            echo "No YouTube cookies configured (optional)"
+          fi
 
       - name: Check for new videos
         id: monitor
         if: ${{ !inputs.force_url }}
         env:
           YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
-          YT_COOKIES_FILE: ${{ secrets.YOUTUBE_COOKIES != '' && '/tmp/youtube_cookies.txt' || '' }}
+          YT_COOKIES_FILE: /tmp/youtube_cookies.txt
         run: |
           set +e  # Don't exit on error
           python src/monitor.py 2>&1 | tee monitor_output.txt
