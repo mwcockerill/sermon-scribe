@@ -13,6 +13,23 @@ from datetime import datetime, timezone
 STATE_FILE = Path(__file__).parent.parent / "state.json"
 
 
+def sanitize_filename(title: str) -> str:
+    """Convert title to safe filename format."""
+    import re
+    # Replace spaces with underscores
+    safe = title.replace(" ", "_")
+    # Remove or replace unsafe characters
+    safe = re.sub(r'[<>:"/\\|?*]', '', safe)
+    # Remove multiple underscores
+    safe = re.sub(r'_+', '_', safe)
+    # Remove leading/trailing underscores
+    safe = safe.strip('_')
+    # Limit length
+    if len(safe) > 100:
+        safe = safe[:100]
+    return safe
+
+
 def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
     """
     Fetch latest videos from a YouTube channel using yt-dlp.
@@ -37,7 +54,7 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
             [
                 "yt-dlp",
                 "--flat-playlist",
-                "--print", "%(id)s\t%(title)s",
+                "--print", "%(id)s\t%(title)s\t%(upload_date)s",
                 "--playlist-end", str(limit),
                 channel_url
             ],
@@ -52,10 +69,26 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
         videos = []
         for line in result.stdout.strip().split("\n"):
             if "\t" in line:
-                video_id, title = line.split("\t", 1)
+                parts = line.split("\t")
+                if len(parts) >= 3:
+                    video_id, title, upload_date = parts[0], parts[1], parts[2]
+                else:
+                    video_id, title, upload_date = parts[0], parts[1] if len(parts) > 1 else "", "NA"
+
+                # Format date as YYYY-MM-DD
+                if upload_date and upload_date != "NA" and len(upload_date) == 8:
+                    formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+                else:
+                    formatted_date = upload_date
+
+                # Sanitize title for filename
+                safe_title = sanitize_filename(title)
+
                 videos.append({
                     "video_id": video_id,
                     "title": title,
+                    "safe_title": safe_title,
+                    "upload_date": formatted_date,
                     "url": f"https://www.youtube.com/watch?v={video_id}"
                 })
 
@@ -148,9 +181,12 @@ if __name__ == "__main__":
             print(f"    {video['url']}")
 
         # Output for GitHub Actions
+        video = new_videos[0]
+        filename = f"sermon_{video['upload_date']}_{video['safe_title']}"
         print(f"\n::set-output name=new_video::true")
-        print(f"::set-output name=video_url::{new_videos[0]['url']}")
-        print(f"::set-output name=video_id::{new_videos[0]['video_id']}")
+        print(f"::set-output name=video_url::{video['url']}")
+        print(f"::set-output name=video_id::{video['video_id']}")
+        print(f"::set-output name=filename::{filename}")
     else:
         print("No new videos found.")
         print(f"::set-output name=new_video::false")

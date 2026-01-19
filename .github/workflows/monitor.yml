@@ -58,9 +58,9 @@ jobs:
 
           if grep -q "Found .* new video" monitor_output.txt; then
             echo "new_video=true" >> $GITHUB_OUTPUT
-            VIDEO_URL=$(grep -oP 'https://www.youtube.com/watch\?v=\K[^ ]+' monitor_output.txt | head -1)
-            echo "video_url=https://www.youtube.com/watch?v=${VIDEO_URL}" >> $GITHUB_OUTPUT
-            VIDEO_ID=$(echo $VIDEO_URL | head -1)
+            VIDEO_URL=$(grep -oP 'https://www.youtube.com/watch\?v=\S+' monitor_output.txt | head -1)
+            echo "video_url=${VIDEO_URL}" >> $GITHUB_OUTPUT
+            VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
             echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
           else
             echo "new_video=false" >> $GITHUB_OUTPUT
@@ -72,8 +72,33 @@ jobs:
         run: |
           echo "new_video=true" >> $GITHUB_OUTPUT
           echo "video_url=${{ inputs.force_url }}" >> $GITHUB_OUTPUT
-          VIDEO_ID=$(echo "${{ inputs.force_url }}" | grep -oP 'v=\K[^&]+')
+
+      - name: Get video metadata
+        id: metadata
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        run: |
+          VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
+          echo "Getting metadata for: $VIDEO_URL"
+
+          # Get video metadata
+          VIDEO_INFO=$(yt-dlp --print "%(id)s\t%(title)s\t%(upload_date)s" "$VIDEO_URL" 2>/dev/null)
+          VIDEO_ID=$(echo "$VIDEO_INFO" | cut -f1)
+          TITLE=$(echo "$VIDEO_INFO" | cut -f2)
+          UPLOAD_DATE=$(echo "$VIDEO_INFO" | cut -f3)
+
+          echo "Title: $TITLE"
+          echo "Upload date: $UPLOAD_DATE"
+
+          # Format date as YYYY-MM-DD
+          FORMATTED_DATE="${UPLOAD_DATE:0:4}-${UPLOAD_DATE:4:2}-${UPLOAD_DATE:6:2}"
+
+          # Sanitize title for filename
+          SAFE_TITLE=$(echo "$TITLE" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100)
+          FILENAME="sermon_${FORMATTED_DATE}_${SAFE_TITLE}"
+
+          echo "Filename: $FILENAME"
           echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
+          echo "filename=${FILENAME}" >> $GITHUB_OUTPUT
 
       - name: Download audio
         if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
@@ -116,8 +141,8 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Cleaning up transcript..."
-          VIDEO_ID="${{ steps.monitor.outputs.video_id || steps.forced.outputs.video_id }}"
-          python src/cleanup.py audio_sermon.json $GPT_MODEL "output/sermon_${VIDEO_ID}.txt"
+          FILENAME="${{ steps.metadata.outputs.filename }}"
+          python src/cleanup.py audio_sermon.json $GPT_MODEL "output/${FILENAME}.txt"
 
       - name: Update state
         if: steps.monitor.outputs.new_video == 'true'
@@ -137,12 +162,13 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          VIDEO_ID="${{ steps.monitor.outputs.video_id || steps.forced.outputs.video_id }}"
+          VIDEO_ID="${{ steps.metadata.outputs.video_id }}"
+          FILENAME="${{ steps.metadata.outputs.filename }}"
           SERMON_FOUND="${{ steps.segment.outputs.sermon_found }}"
 
           # Add the sermon transcript if it exists
           if [ "$SERMON_FOUND" == "true" ]; then
-            git add "output/sermon_${VIDEO_ID}.txt" || true
+            git add "output/${FILENAME}.txt" || true
           fi
           git add state.json || true
 
@@ -151,7 +177,7 @@ jobs:
             echo "No changes to commit"
           else
             if [ "$SERMON_FOUND" == "true" ]; then
-              git commit -m "Add sermon transcript for video ${VIDEO_ID}"
+              git commit -m "Add sermon: ${FILENAME}"
             else
               git commit -m "Update state: no sermon found in video ${VIDEO_ID}"
             fi
