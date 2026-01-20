@@ -25,7 +25,7 @@ from cleanup import cleanup_sermon
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 JEKYLL_DIR = Path(__file__).parent.parent / "docs" / "_sermons"
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
 GPT_MODEL = os.environ.get("GPT_MODEL", "gpt-4o-mini")
 
 
@@ -168,7 +168,14 @@ def process_video(video: dict) -> bool:
         boundaries = segment_transcript(formatted, model=GPT_MODEL)
 
         if not boundaries.get("sermon_start") or not boundaries.get("sermon_end"):
-            print(f"  No sermon found: {boundaries.get('reasoning', 'Unknown reason')}")
+            reason = boundaries.get('reasoning', 'Unknown reason')
+            print(f"  No sermon found: {reason}")
+            # Save placeholder file so we don't reprocess this video
+            filename = filename_for_video(video)
+            output_file = OUTPUT_DIR / f"{filename}.txt"
+            with open(output_file, "w") as f:
+                f.write(f"[NO SERMON FOUND]\n\n{reason}")
+            print(f"  Saved placeholder: {output_file.name}")
             return False
 
         sermon_segments = extract_sermon_segments(

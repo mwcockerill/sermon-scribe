@@ -9,7 +9,7 @@ endif
 # Default video URL (override with: make download URL=https://...)
 URL ?=
 # Whisper model size (tiny, base, small, medium, large)
-MODEL ?= base
+MODEL ?= small
 # OpenAI model for segmentation
 GPT ?= gpt-4o-mini
 # Input file for transcription
