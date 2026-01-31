@@ -142,9 +142,9 @@ def is_video_available(video_id: str) -> bool:
         if result.returncode != 0:
             if "live event will begin" in result.stderr:
                 return False
-            # Other errors - consider unavailable to be safe
-            print(f"Warning: Could not check availability for {video_id}: {result.stderr[:200]}")
-            return False
+            # Other errors - assume available and let download attempt fail if needed
+            print(f"Warning: Could not verify availability for {video_id}: {result.stderr[:200]}")
+            return True  # Try downloading anyway
 
         # Parse JSON to check live_status
         try:
@@ -158,10 +158,10 @@ def is_video_available(video_id: str) -> bool:
 
     except subprocess.TimeoutExpired:
         print(f"Warning: Timeout checking availability for {video_id}")
-        return False
+        return True  # Assume available, let download attempt
     except Exception as e:
         print(f"Warning: Error checking availability for {video_id}: {e}")
-        return False
+        return True  # Assume available, let download attempt
 
 
 def load_state() -> dict:
