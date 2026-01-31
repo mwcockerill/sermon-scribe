@@ -91,13 +91,31 @@ jobs:
           VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
           echo "Video ID: $VIDEO_ID"
 
-          # Check live status using yt-dlp
+          # Check live status using yt-dlp (allow it to fail)
           echo "Checking live status..."
-          VIDEO_INFO=$(yt-dlp --dump-json --skip-download "$VIDEO_URL")
+          set +e
+          VIDEO_INFO=$(yt-dlp --dump-json --skip-download "$VIDEO_URL" 2>&1)
+          YTDLP_EXIT_CODE=$?
+          set -e
+
+          # Check if yt-dlp failed due to upcoming live stream
+          if [ $YTDLP_EXIT_CODE -ne 0 ]; then
+            if echo "$VIDEO_INFO" | grep -q "live event will begin"; then
+              echo "Video is scheduled but not yet available. Skipping."
+              echo "is_available=false" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              # Different error - fail the step
+              echo "yt-dlp failed with unexpected error:"
+              echo "$VIDEO_INFO"
+              exit 1
+            fi
+          fi
+
           LIVE_STATUS=$(echo "$VIDEO_INFO" | jq -r '.live_status // "not_live"')
           echo "Live status: $LIVE_STATUS"
 
-          # Skip if video is upcoming (not yet started)
+          # Also check live_status field in case yt-dlp succeeds but video is upcoming
           if [ "$LIVE_STATUS" = "is_upcoming" ]; then
             echo "Video is scheduled but not yet available. Skipping."
             echo "is_available=false" >> $GITHUB_OUTPUT
