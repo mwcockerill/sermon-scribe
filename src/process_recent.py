@@ -25,7 +25,7 @@ from cleanup import cleanup_sermon
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 JEKYLL_DIR = Path(__file__).parent.parent / "docs" / "_sermons"
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "medium")
 GPT_MODEL = os.environ.get("GPT_MODEL", "gpt-4o-mini")
 
 
