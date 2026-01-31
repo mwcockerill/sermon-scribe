@@ -114,6 +114,55 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
     return list(all_videos.values())
 
 
+def is_video_available(video_id: str) -> bool:
+    """
+    Check if a video is available for download (not an upcoming live stream).
+
+    Args:
+        video_id: YouTube video ID
+
+    Returns:
+        True if video is available, False if upcoming/scheduled
+    """
+    try:
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--dump-json",
+                "--skip-download",
+                f"https://www.youtube.com/watch?v={video_id}"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        # If yt-dlp fails, check if it's due to upcoming live stream
+        if result.returncode != 0:
+            if "live event will begin" in result.stderr:
+                return False
+            # Other errors - consider unavailable to be safe
+            print(f"Warning: Could not check availability for {video_id}: {result.stderr[:200]}")
+            return False
+
+        # Parse JSON to check live_status
+        try:
+            video_info = json.loads(result.stdout)
+            live_status = video_info.get("live_status", "not_live")
+            # Skip if upcoming, allow everything else (not_live, is_live, post_live)
+            return live_status != "is_upcoming"
+        except json.JSONDecodeError:
+            # If we can't parse, assume it's available
+            return True
+
+    except subprocess.TimeoutExpired:
+        print(f"Warning: Timeout checking availability for {video_id}")
+        return False
+    except Exception as e:
+        print(f"Warning: Error checking availability for {video_id}: {e}")
+        return False
+
+
 def load_state() -> dict:
     """Load the state file containing last processed video."""
     if STATE_FILE.exists():
@@ -161,6 +210,11 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
         title = video.get("title", "")
         if "Daily" in title or "Morning" in title:
             print(f"Skipping daily/morning video: {title}")
+            continue
+
+        # Check if video is available (not upcoming)
+        if not is_video_available(video["video_id"]):
+            print(f"Skipping upcoming/unavailable video: {title}")
             continue
 
         new_videos.append(video)
