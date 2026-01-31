@@ -22,7 +22,7 @@ CHANNEL_ID ?= $(YOUTUBE_CHANNEL_ID)
 # Days to look back for catch-up
 DAYS ?= 7
 
-.PHONY: install download transcribe segment cleanup monitor catch-up clean help
+.PHONY: install download transcribe segment cleanup monitor catch-up publish clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
@@ -36,10 +36,11 @@ help:
 	@echo "  make cleanup              Polish the extracted sermon"
 	@echo "  make run URL=<url>        Download and transcribe in one step"
 	@echo "  make full URL=<url>       Full pipeline: download, transcribe, segment, cleanup"
+	@echo "  make publish URL=<url>    Complete pipeline including GitHub Pages publish"
 	@echo "  make clean                Remove downloaded files and transcripts"
 	@echo ""
 	@echo "Options:"
-	@echo "  MODEL=base                Whisper model (tiny/base/small/medium/large)"
+	@echo "  MODEL=medium              Whisper model (tiny/base/small/medium/large)"
 	@echo "  GPT=gpt-4o-mini           OpenAI model for segmentation/cleanup"
 	@echo "  CHANNEL_ID=UC...          YouTube channel ID for monitoring"
 	@echo "  DAYS=7                    Days to look back for catch-up"
@@ -47,6 +48,7 @@ help:
 	@echo "Requires: OPENAI_API_KEY environment variable for segmentation/cleanup"
 	@echo ""
 	@echo "Examples:"
+	@echo "  make publish URL=https://www.youtube.com/watch?v=VIDEO_ID"
 	@echo "  make full URL=https://www.youtube.com/watch?v=VIDEO_ID"
 	@echo "  make catch-up             Process last 7 days and push to GitHub"
 	@echo "  make catch-up DAYS=14     Process last 14 days and push to GitHub"
@@ -72,7 +74,7 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	@echo "Downloaded to: output/audio.mp3"
 
 transcribe:
@@ -90,7 +92,7 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	python3 src/transcribe.py output/audio.mp3 $(MODEL)
 
 full:
@@ -99,12 +101,48 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	python3 src/transcribe.py output/audio.mp3 $(MODEL)
 	python3 src/segment.py audio_transcript.json $(GPT)
 	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
 	@echo ""
 	@echo "Done! Cleaned sermon saved to: output/sermon.txt"
+
+publish:
+ifndef URL
+	$(error URL is required. Usage: make publish URL=https://youtube.com/watch?v=...)
+endif
+	@mkdir -p output
+	@rm -f output/audio.mp3
+	@echo "Getting video metadata..."
+	$(eval VIDEO_ID := $(shell echo "$(URL)" | grep -oP 'v=\K[^&]+'))
+	$(eval OEMBED_JSON := $(shell curl -s "https://www.youtube.com/oembed?url=$(URL)&format=json"))
+	$(eval TITLE := $(shell echo '$(OEMBED_JSON)' | jq -r '.title'))
+	$(eval DATE_STR := $(shell echo "$(TITLE)" | grep -oP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}' | head -1))
+	$(eval FORMATTED_DATE := $(shell date -j -f "%b. %d, %Y" "$(DATE_STR)" +%Y-%m-%d 2>/dev/null || echo ""))
+	$(eval SAFE_TITLE := $(shell echo "$(TITLE)" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100))
+	$(eval FILENAME := $(if $(FORMATTED_DATE),sermon_$(FORMATTED_DATE)_$(SAFE_TITLE),sermon_$(SAFE_TITLE)))
+	@echo "Title: $(TITLE)"
+	@echo "Date: $(FORMATTED_DATE)"
+	@echo "Video ID: $(VIDEO_ID)"
+	@echo "Filename: $(FILENAME)"
+	@echo ""
+	@echo "Downloading audio..."
+	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	@echo "Transcribing..."
+	python3 src/transcribe.py output/audio.mp3 $(MODEL)
+	@echo "Segmenting..."
+	python3 src/segment.py audio_transcript.json $(GPT)
+	@echo "Cleaning up transcript..."
+	python3 src/cleanup.py audio_sermon.json $(GPT) "output/$(FILENAME).txt"
+	@echo "Publishing to Jekyll..."
+	python3 src/publish_sermon.py "output/$(FILENAME).txt" "$(TITLE)" "$(FORMATTED_DATE)" "$(VIDEO_ID)"
+	@echo ""
+	@echo "Done! Sermon published to docs/_sermons/"
+	@echo "Next steps:"
+	@echo "  git add output/$(FILENAME).txt docs/_sermons/"
+	@echo "  git commit -m 'Add sermon: $(FILENAME)'"
+	@echo "  git push"
 
 clean:
 	rm -rf output/*
