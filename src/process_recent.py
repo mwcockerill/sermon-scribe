@@ -17,7 +17,7 @@ from pathlib import Path
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from monitor import fetch_latest_videos, sanitize_filename
+from monitor import fetch_latest_videos, sanitize_filename, is_video_available
 from transcribe import transcribe, segments_to_text
 from segment import segment_transcript, extract_sermon_segments, segments_to_text as sermon_to_text
 from cleanup import cleanup_sermon
@@ -346,10 +346,16 @@ def main():
 
     for video in recent_videos:
         title = video.get("title", "")
+        video_id = video.get("video_id", "")
 
         # Skip daily/morning videos (e.g., daily devotionals, morning prayer)
         if "Daily" in title or "Morning" in title:
             print(f"  [SKIP] {title[:50]}... (daily/morning video)")
+            continue
+
+        # Skip upcoming/unavailable videos
+        if not is_video_available(video_id):
+            print(f"  [SKIP] {title[:50]}... (upcoming/unavailable)")
             continue
 
         if video_has_transcript(video):
