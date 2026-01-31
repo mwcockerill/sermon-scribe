@@ -1,0 +1,182 @@
+name: Catch Up - Process Multiple Videos
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_videos:
+        description: 'Maximum number of videos to process'
+        required: false
+        default: '10'
+        type: string
+
+env:
+  WHISPER_MODEL: base
+  GPT_MODEL: gpt-4o-mini
+
+jobs:
+  catch-up:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to push commits
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache apt packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg
+          version: 1.0
+
+      - name: Cache Whisper model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/whisper
+          key: whisper-${{ env.WHISPER_MODEL }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Process multiple videos
+        env:
+          YOUTUBE_CHANNEL_ID: ${{ secrets.YOUTUBE_CHANNEL_ID }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          MAX_VIDEOS=${{ inputs.max_videos }}
+          PROCESSED_COUNT=0
+
+          echo "Starting catch-up process (max $MAX_VIDEOS videos)..."
+
+          while [ $PROCESSED_COUNT -lt $MAX_VIDEOS ]; do
+            echo ""
+            echo "=== Processing video $((PROCESSED_COUNT + 1)) of $MAX_VIDEOS ==="
+
+            # Check for new videos
+            python src/monitor.py > monitor_output.txt 2>&1 || true
+            cat monitor_output.txt
+
+            # Check if new video found
+            if ! grep -q "Found .* new video" monitor_output.txt; then
+              echo "No more new videos found. Stopping."
+              break
+            fi
+
+            # Extract video info
+            VIDEO_URL=$(grep -oP 'https://www.youtube.com/watch\?v=\S+' monitor_output.txt | head -1)
+            VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
+
+            echo "Processing: $VIDEO_URL"
+
+            # Get metadata
+            echo "Getting metadata..."
+            OEMBED_JSON=$(curl -s "https://www.youtube.com/oembed?url=${VIDEO_URL}&format=json")
+            TITLE=$(echo "$OEMBED_JSON" | jq -r '.title')
+
+            # Extract date from title
+            DATE_STR=$(echo "$TITLE" | grep -oP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}' | head -1 || echo "")
+            if [ -n "$DATE_STR" ]; then
+              FORMATTED_DATE=$(date -d "$DATE_STR" +%Y-%m-%d 2>/dev/null || echo "")
+            else
+              FORMATTED_DATE=""
+            fi
+
+            SAFE_TITLE=$(echo "$TITLE" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100)
+            if [ -n "$FORMATTED_DATE" ]; then
+              FILENAME="sermon_${FORMATTED_DATE}_${SAFE_TITLE}"
+            else
+              FILENAME="sermon_${SAFE_TITLE}"
+            fi
+
+            echo "Title: $TITLE"
+            echo "Date: $FORMATTED_DATE"
+            echo "Filename: $FILENAME"
+
+            # Download audio
+            echo "Downloading audio..."
+            mkdir -p output
+            yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL" || {
+              echo "Download failed, skipping this video"
+              # Update state to skip this video
+              python -c "
+import json
+from datetime import datetime
+state = {'last_video_id': '${VIDEO_ID}', 'last_check': datetime.utcnow().isoformat()}
+with open('state.json', 'w') as f:
+    json.dump(state, f, indent=2)
+              "
+              continue
+            }
+
+            # Transcribe
+            echo "Transcribing..."
+            python src/transcribe.py output/audio.mp3 $WHISPER_MODEL
+
+            # Segment
+            echo "Segmenting..."
+            set +e
+            python src/segment.py audio_transcript.json $GPT_MODEL
+            SEGMENT_EXIT=$?
+            set -e
+
+            if [ $SEGMENT_EXIT -eq 2 ]; then
+              echo "No sermon found in video, skipping"
+              # Update state and continue to next video
+              python -c "
+import json
+from datetime import datetime
+state = {'last_video_id': '${VIDEO_ID}', 'last_check': datetime.utcnow().isoformat()}
+with open('state.json', 'w') as f:
+    json.dump(state, f, indent=2)
+              "
+              PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
+              continue
+            elif [ $SEGMENT_EXIT -ne 0 ]; then
+              echo "Segmentation failed, stopping"
+              break
+            fi
+
+            # Cleanup transcript
+            echo "Cleaning up transcript..."
+            python src/cleanup.py audio_sermon.json $GPT_MODEL "output/${FILENAME}.txt"
+
+            # Publish to Jekyll
+            echo "Publishing to Jekyll..."
+            python src/publish_sermon.py "output/${FILENAME}.txt" "$TITLE" "$FORMATTED_DATE" "$VIDEO_ID"
+
+            # Update state
+            python -c "
+import json
+from datetime import datetime
+state = {'last_video_id': '${VIDEO_ID}', 'last_check': datetime.utcnow().isoformat()}
+with open('state.json', 'w') as f:
+    json.dump(state, f, indent=2)
+            "
+
+            # Commit
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add "output/${FILENAME}.txt" docs/_sermons/ state.json || true
+
+            if ! git diff --staged --quiet; then
+              git commit -m "Add sermon: ${FILENAME}"
+              git push
+            fi
+
+            PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
+            echo "Successfully processed video $PROCESSED_COUNT"
+
+            # Clean up for next iteration
+            rm -f output/audio.mp3 audio_transcript.json audio_sermon.json
+          done
+
+          echo ""
+          echo "=== Catch-up complete! Processed $PROCESSED_COUNT video(s) ==="
