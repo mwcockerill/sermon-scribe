@@ -91,6 +91,21 @@ jobs:
           VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
           echo "Video ID: $VIDEO_ID"
 
+          # Check live status using yt-dlp
+          echo "Checking live status..."
+          VIDEO_INFO=$(yt-dlp --dump-json --skip-download "$VIDEO_URL")
+          LIVE_STATUS=$(echo "$VIDEO_INFO" | jq -r '.live_status // "not_live"')
+          echo "Live status: $LIVE_STATUS"
+
+          # Skip if video is upcoming (not yet started)
+          if [ "$LIVE_STATUS" = "is_upcoming" ]; then
+            echo "Video is scheduled but not yet available. Skipping."
+            echo "is_available=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "is_available=true" >> $GITHUB_OUTPUT
+
           # Get title from YouTube oEmbed API (no auth required)
           OEMBED_URL="https://www.youtube.com/oembed?url=${VIDEO_URL}&format=json"
           echo "Fetching oEmbed: $OEMBED_URL"
@@ -141,7 +156,7 @@ jobs:
           echo "filename=${FILENAME}" >> $GITHUB_OUTPUT
 
       - name: Download audio
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
         run: |
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Downloading: $VIDEO_URL"
@@ -149,14 +164,14 @@ jobs:
           yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
 
       - name: Transcribe audio
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
         run: |
           echo "Transcribing with Whisper ($WHISPER_MODEL model)..."
           python src/transcribe.py output/audio.mp3 $WHISPER_MODEL
 
       - name: Segment sermon
         id: segment
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -176,7 +191,7 @@ jobs:
           fi
 
       - name: Cleanup transcript
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.segment.outputs.sermon_found == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -197,7 +212,7 @@ jobs:
           "
 
       - name: Commit results
-        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -225,7 +240,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.segment.outputs.sermon_found == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sermon-transcript
