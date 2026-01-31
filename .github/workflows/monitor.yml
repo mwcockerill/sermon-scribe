@@ -172,6 +172,8 @@ jobs:
           echo "Filename: $FILENAME"
           echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
           echo "filename=${FILENAME}" >> $GITHUB_OUTPUT
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+          echo "date=${FORMATTED_DATE}" >> $GITHUB_OUTPUT
 
       - name: Download audio
         if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
@@ -217,6 +219,17 @@ jobs:
           FILENAME="${{ steps.metadata.outputs.filename }}"
           python src/cleanup.py audio_sermon.json $GPT_MODEL "output/${FILENAME}.txt"
 
+      - name: Publish to Jekyll
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
+        run: |
+          echo "Publishing sermon to Jekyll..."
+          FILENAME="${{ steps.metadata.outputs.filename }}"
+          TITLE="${{ steps.metadata.outputs.title }}"
+          DATE="${{ steps.metadata.outputs.date }}"
+          VIDEO_ID="${{ steps.metadata.outputs.video_id }}"
+
+          python src/publish_sermon.py "output/${FILENAME}.txt" "$TITLE" "$DATE" "$VIDEO_ID"
+
       - name: Update state
         if: steps.monitor.outputs.new_video == 'true'
         run: |
@@ -239,9 +252,10 @@ jobs:
           FILENAME="${{ steps.metadata.outputs.filename }}"
           SERMON_FOUND="${{ steps.segment.outputs.sermon_found }}"
 
-          # Add the sermon transcript if it exists
+          # Add the sermon transcript and Jekyll file if they exist
           if [ "$SERMON_FOUND" == "true" ]; then
             git add "output/${FILENAME}.txt" || true
+            git add docs/_sermons/ || true
           fi
           git add state.json || true
 
