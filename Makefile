@@ -72,7 +72,7 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	@echo "Downloaded to: output/audio.mp3"
 
 transcribe:
@@ -90,7 +90,7 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	python3 src/transcribe.py output/audio.mp3 $(MODEL)
 
 full:
@@ -99,7 +99,7 @@ ifndef URL
 endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
-	yt-dlp -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
+	yt-dlp --extractor-args youtube:player_client=web -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	python3 src/transcribe.py output/audio.mp3 $(MODEL)
 	python3 src/segment.py audio_transcript.json $(GPT)
 	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
