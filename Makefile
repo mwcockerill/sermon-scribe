@@ -115,10 +115,10 @@ endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
 	@echo "Getting video metadata..."
-	$(eval VIDEO_ID := $(shell echo "$(URL)" | grep -oP 'v=\K[^&]+'))
+	$(eval VIDEO_ID := $(shell python3 -c "import re; m = re.search(r'v=([^&]+)', '$(URL)'); print(m.group(1) if m else '')"))
 	$(eval OEMBED_JSON := $(shell curl -s "https://www.youtube.com/oembed?url=$(URL)&format=json"))
 	$(eval TITLE := $(shell echo '$(OEMBED_JSON)' | jq -r '.title'))
-	$(eval DATE_STR := $(shell echo "$(TITLE)" | grep -oP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}' | head -1))
+	$(eval DATE_STR := $(shell python3 -c "import re; m = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}', '$(TITLE)'); print(m.group(0) if m else '')"))
 	$(eval FORMATTED_DATE := $(shell date -j -f "%b. %d, %Y" "$(DATE_STR)" +%Y-%m-%d 2>/dev/null || echo ""))
 	$(eval SAFE_TITLE := $(shell echo "$(TITLE)" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100))
 	$(eval FILENAME := $(if $(FORMATTED_DATE),sermon_$(FORMATTED_DATE)_$(SAFE_TITLE),sermon_$(SAFE_TITLE)))
