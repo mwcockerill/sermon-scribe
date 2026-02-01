@@ -67,9 +67,9 @@ jobs:
 
           if grep -q "Found .* new video" monitor_output.txt; then
             echo "new_video=true" >> $GITHUB_OUTPUT
-            VIDEO_URL=$(grep -oP 'https://www.youtube.com/watch\?v=\S+' monitor_output.txt | head -1)
+            VIDEO_URL=$(python3 -c "import re; import sys; m = re.search(r'https://www\.youtube\.com/watch\?v=\S+', sys.stdin.read()); print(m.group(0) if m else '')" < monitor_output.txt)
             echo "video_url=${VIDEO_URL}" >> $GITHUB_OUTPUT
-            VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
+            VIDEO_ID=$(python3 -c "import re; m = re.search(r'v=([^&]+)', '${VIDEO_URL}'); print(m.group(1) if m else '')")
             echo "video_id=${VIDEO_ID}" >> $GITHUB_OUTPUT
           else
             echo "new_video=false" >> $GITHUB_OUTPUT
@@ -90,7 +90,7 @@ jobs:
           echo "Getting metadata for: $VIDEO_URL"
 
           # Extract video ID from URL
-          VIDEO_ID=$(echo "$VIDEO_URL" | grep -oP 'v=\K[^&]+')
+          VIDEO_ID=$(python3 -c "import re; m = re.search(r'v=([^&]+)', '${VIDEO_URL}'); print(m.group(1) if m else '')")
           echo "Video ID: $VIDEO_ID"
 
           # Check live status using yt-dlp (allow it to fail)
@@ -140,14 +140,14 @@ jobs:
           FORMATTED_DATE=""
 
           # Try "Mon. D, YYYY" or "Month D, YYYY" format
-          if echo "$TITLE" | grep -qP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}'; then
-            DATE_STR=$(echo "$TITLE" | grep -oP '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}' | head -1)
+          DATE_STR=$(python3 -c "import re; m = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}', '${TITLE}'); print(m.group(0) if m else '')")
+          if [ -n "$DATE_STR" ]; then
             FORMATTED_DATE=$(date -d "$DATE_STR" +%Y-%m-%d 2>/dev/null || echo "")
           fi
 
           # Try "YYYY-MM-DD" format
-          if [ -z "$FORMATTED_DATE" ] && echo "$TITLE" | grep -qP '\d{4}-\d{2}-\d{2}'; then
-            FORMATTED_DATE=$(echo "$TITLE" | grep -oP '\d{4}-\d{2}-\d{2}' | head -1)
+          if [ -z "$FORMATTED_DATE" ]; then
+            FORMATTED_DATE=$(python3 -c "import re; m = re.search(r'\d{4}-\d{2}-\d{2}', '${TITLE}'); print(m.group(0) if m else '')")
           fi
 
           if [ -n "$FORMATTED_DATE" ]; then
