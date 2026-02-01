@@ -12,13 +12,13 @@ Sermon Scribe monitors a YouTube channel for new uploads, downloads the video, i
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
 │  YouTube        │     │   Download   │     │  Transcribe │
 │  Monitor        │────▶│   (yt-dlp)   │────▶│  (Whisper)  │
-│  (yt-dlp)       │     │              │     │             │
+│  (yt-dlp)       │     │              │     │   medium    │
 └─────────────────┘     └──────────────┘     └─────────────┘
                                                     │
                                                     ▼
 ┌─────────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Output         │     │   Cleanup    │     │  Segment    │
-│  (.txt)         │◀────│   (OpenAI)   │◀────│  (OpenAI)   │
+│ GitHub Pages    │     │   Cleanup    │     │  Segment    │
+│ (Jekyll)        │◀────│   (OpenAI)   │◀────│  (OpenAI)   │
 │                 │     │              │     │             │
 └─────────────────┘     └──────────────┘     └─────────────┘
 ```
@@ -71,8 +71,14 @@ To enable automatic monitoring and processing:
 # See all commands
 make help
 
-# Full pipeline: download, transcribe, segment, cleanup
+# Complete pipeline: download, transcribe, segment, cleanup, and publish to GitHub Pages
+make publish "URL=https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Full pipeline without publishing (just creates transcript)
 make full "URL=https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Process recent videos missing transcripts
+make catch-up
 
 # Or run steps individually:
 make download "URL=https://www.youtube.com/watch?v=VIDEO_ID"
@@ -89,15 +95,25 @@ python src/monitor.py YOUR_CHANNEL_ID
 The workflow automatically:
 1. Checks for new videos at 8am and 8pm UTC
 2. Downloads and processes new uploads
-3. Commits the cleaned transcript to `output/sermon_DATE_TITLE.txt`
-4. Updates `state.json` with the last processed video
+3. Transcribes with Whisper medium model
+4. Segments to find sermon boundaries
+5. Cleans up the transcript with GPT-4o-mini
+6. Publishes to GitHub Pages (Jekyll) at `docs/_sermons/`
+7. Commits and pushes changes
+8. Updates `state.json` with the last processed video
+
+**Note:** Skips videos that are scheduled/upcoming until they're available.
 
 ### Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `MODEL` | `base` | Whisper model: tiny, base, small, medium, large |
+| `MODEL` | `medium` | Whisper model: tiny, base, small, medium, large |
 | `GPT` | `gpt-4o-mini` | OpenAI model: gpt-4o-mini, gpt-4o |
+
+**Performance Notes:**
+- Whisper uses MPS (Metal Performance Shaders) acceleration on Apple Silicon for faster transcription
+- Medium model recommended for better accuracy detecting sermons in complex services
 
 ## Pipeline Stages
 
@@ -128,9 +144,12 @@ The workflow automatically:
 - Add proper punctuation and paragraph breaks
 - Remove filler words and false starts
 
-### 6. Output
-- Generate final transcript as plain text
-- Ready for upload to church website
+### 6. Publish
+- Create Jekyll markdown file with front matter
+- Include metadata: title, date, YouTube video ID
+- Generate description from first 150 words
+- Save to `docs/_sermons/` for GitHub Pages
+- Automatic deployment to church website
 
 ## Tech Stack
 
@@ -153,13 +172,18 @@ sermon-scribe/
 ├── .env                    # Local config (gitignored)
 ├── .github/
 │   └── workflows/
-│       └── monitor.yml     # GitHub Actions workflow
+│       ├── monitor.yml     # Scheduled monitoring (8am/8pm UTC)
+│       └── catch-up.yml    # Manual batch processing
 ├── src/
 │   ├── __init__.py
 │   ├── transcribe.py       # Whisper transcription
 │   ├── segment.py          # Sermon boundary detection
 │   ├── cleanup.py          # Transcript polishing
-│   └── monitor.py          # YouTube channel monitoring
+│   ├── monitor.py          # YouTube channel monitoring
+│   ├── publish_sermon.py   # Jekyll/GitHub Pages publishing
+│   └── process_recent.py   # Batch process recent videos
+├── docs/
+│   └── _sermons/           # Jekyll sermon posts (GitHub Pages)
 └── output/
     └── sermon_*.txt        # Generated transcripts
 ```
@@ -170,11 +194,15 @@ sermon-scribe/
 - [x] Implement transcription module (Whisper)
 - [x] Implement segmentation module (OpenAI)
 - [x] Implement cleanup module (OpenAI)
-- [x] Implement YouTube monitoring (RSS)
+- [x] Implement YouTube monitoring
 - [x] GitHub Actions automation
+- [x] GitHub Pages publishing (Jekyll)
+- [x] Batch processing for catch-up
+- [x] Handle upcoming/scheduled videos
+- [x] MPS acceleration for Apple Silicon
 - [ ] Add configuration management (YAML)
 - [ ] Support for multiple channels
-- [ ] Web interface for browsing transcripts
+- [ ] Search functionality for sermons
 
 ## License
 
