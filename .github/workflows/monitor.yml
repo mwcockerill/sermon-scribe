@@ -96,7 +96,7 @@ jobs:
           # Check live status using yt-dlp (allow it to fail)
           echo "Checking live status..."
           set +e
-          VIDEO_INFO=$(yt-dlp --dump-json --skip-download "$VIDEO_URL" 2>&1)
+          VIDEO_INFO=$(yt-dlp --extractor-args youtube:player_client=web --dump-json --skip-download "$VIDEO_URL" 2>&1)
           YTDLP_EXIT_CODE=$?
           set -e
 
