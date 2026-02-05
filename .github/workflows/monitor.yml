@@ -1,9 +1,9 @@
 name: Monitor YouTube Channel
 
 on:
-  schedule:
-    # Run at 8am and 8pm UTC
-    - cron: '0 8,20 * * *'
+  # schedule:
+  #   # Run at 8am and 8pm UTC (disabled until self-hosted runner is set up)
+  #   - cron: '0 8,20 * * *'
   workflow_dispatch:
     # Allow manual trigger
     inputs:
