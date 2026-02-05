@@ -93,43 +93,6 @@ jobs:
           VIDEO_ID=$(python3 -c "import re; m = re.search(r'v=([^&]+)', '${VIDEO_URL}'); print(m.group(1) if m else '')")
           echo "Video ID: $VIDEO_ID"
 
-          # Check live status using yt-dlp (allow it to fail)
-          echo "Checking live status..."
-          set +e
-          VIDEO_INFO=$(yt-dlp --extractor-args youtube:player_client=android --dump-json --skip-download "$VIDEO_URL" 2>&1)
-          YTDLP_EXIT_CODE=$?
-          set -e
-
-          # Check if yt-dlp failed due to upcoming live stream or bot detection
-          if [ $YTDLP_EXIT_CODE -ne 0 ]; then
-            if echo "$VIDEO_INFO" | grep -q "live event will begin"; then
-              echo "Video is scheduled but not yet available. Skipping."
-              echo "is_available=false" >> $GITHUB_OUTPUT
-              exit 0
-            elif echo "$VIDEO_INFO" | grep -q "Sign in to confirm"; then
-              echo "YouTube bot detection triggered. Skipping for now."
-              echo "is_available=false" >> $GITHUB_OUTPUT
-              exit 0
-            else
-              # Different error - fail the step
-              echo "yt-dlp failed with unexpected error:"
-              echo "$VIDEO_INFO"
-              exit 1
-            fi
-          fi
-
-          LIVE_STATUS=$(echo "$VIDEO_INFO" | jq -r '.live_status // "not_live"')
-          echo "Live status: $LIVE_STATUS"
-
-          # Also check live_status field in case yt-dlp succeeds but video is upcoming
-          if [ "$LIVE_STATUS" = "is_upcoming" ]; then
-            echo "Video is scheduled but not yet available. Skipping."
-            echo "is_available=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "is_available=true" >> $GITHUB_OUTPUT
-
           # Get title from YouTube oEmbed API (no auth required)
           OEMBED_URL="https://www.youtube.com/oembed?url=${VIDEO_URL}&format=json"
           echo "Fetching oEmbed: $OEMBED_URL"
@@ -182,22 +145,42 @@ jobs:
           echo "date=${FORMATTED_DATE}" >> $GITHUB_OUTPUT
 
       - name: Download audio
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
+        id: download
+        if: steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true'
         run: |
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Downloading: $VIDEO_URL"
           mkdir -p output
-          yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
+          set +e
+          yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL" 2>&1 | tee download_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+
+          if [ $EXIT_CODE -ne 0 ]; then
+            if grep -q "live event will begin" download_output.txt; then
+              echo "Video is scheduled but not yet available. Skipping."
+              echo "download_ok=false" >> $GITHUB_OUTPUT
+            elif grep -q "Sign in to confirm" download_output.txt; then
+              echo "YouTube bot detection on download. Skipping."
+              echo "download_ok=false" >> $GITHUB_OUTPUT
+            else
+              echo "Download failed with unexpected error"
+              cat download_output.txt
+              exit 1
+            fi
+          else
+            echo "download_ok=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Transcribe audio
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.download.outputs.download_ok == 'true'
         run: |
           echo "Transcribing with Whisper ($WHISPER_MODEL model)..."
           python src/transcribe.py output/audio.mp3 $WHISPER_MODEL
 
       - name: Segment sermon
         id: segment
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.download.outputs.download_ok == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -217,7 +200,7 @@ jobs:
           fi
 
       - name: Cleanup transcript
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.download.outputs.download_ok == 'true' && steps.segment.outputs.sermon_found == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
@@ -226,7 +209,7 @@ jobs:
           python src/cleanup.py audio_sermon.json $GPT_MODEL "output/${FILENAME}.txt"
 
       - name: Publish to Jekyll
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.download.outputs.download_ok == 'true' && steps.segment.outputs.sermon_found == 'true'
         run: |
           echo "Publishing sermon to Jekyll..."
           FILENAME="${{ steps.metadata.outputs.filename }}"
@@ -257,7 +240,7 @@ jobs:
           VIDEO_ID="${{ steps.metadata.outputs.video_id }}"
           FILENAME="${{ steps.metadata.outputs.filename }}"
           SERMON_FOUND="${{ steps.segment.outputs.sermon_found }}"
-          IS_AVAILABLE="${{ steps.metadata.outputs.is_available }}"
+          DOWNLOAD_OK="${{ steps.download.outputs.download_ok }}"
 
           # Add the sermon transcript and Jekyll file if they exist
           if [ "$SERMON_FOUND" == "true" ]; then
@@ -272,8 +255,8 @@ jobs:
           else
             if [ "$SERMON_FOUND" == "true" ]; then
               git commit -m "Add sermon: ${FILENAME}"
-            elif [ "$IS_AVAILABLE" == "false" ]; then
-              git commit -m "Skip upcoming video: ${VIDEO_ID}"
+            elif [ "$DOWNLOAD_OK" == "false" ]; then
+              git commit -m "Skip unavailable video: ${VIDEO_ID}"
             else
               git commit -m "Update state: no sermon found in video ${VIDEO_ID}"
             fi
@@ -281,7 +264,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true' && steps.segment.outputs.sermon_found == 'true'
+        if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.download.outputs.download_ok == 'true' && steps.segment.outputs.sermon_found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: sermon-transcript
