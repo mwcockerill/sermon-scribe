@@ -110,7 +110,7 @@ def download_audio(url: str, output_path: Path) -> bool:
         result = subprocess.run(
             [
                 "yt-dlp",
-                "--extractor-args", "youtube:player_client=ios",
+                "--extractor-args", "youtube:player_client=android",
                 "-x",
                 "--audio-format", "mp3",
                 "-o", str(output_path),

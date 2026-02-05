@@ -96,7 +96,7 @@ jobs:
           # Check live status using yt-dlp (allow it to fail)
           echo "Checking live status..."
           set +e
-          VIDEO_INFO=$(yt-dlp --extractor-args youtube:player_client=ios --dump-json --skip-download "$VIDEO_URL" 2>&1)
+          VIDEO_INFO=$(yt-dlp --extractor-args youtube:player_client=android --dump-json --skip-download "$VIDEO_URL" 2>&1)
           YTDLP_EXIT_CODE=$?
           set -e
 
@@ -187,7 +187,7 @@ jobs:
           VIDEO_URL="${{ steps.monitor.outputs.video_url || steps.forced.outputs.video_url }}"
           echo "Downloading: $VIDEO_URL"
           mkdir -p output
-          yt-dlp --extractor-args youtube:player_client=ios -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
+          yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$VIDEO_URL"
 
       - name: Transcribe audio
         if: (steps.monitor.outputs.new_video == 'true' || steps.forced.outputs.new_video == 'true') && steps.metadata.outputs.is_available == 'true'

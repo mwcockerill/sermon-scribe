@@ -130,7 +130,7 @@ def is_video_available(video_id: str) -> bool:
                 "yt-dlp",
                 "--dump-json",
                 "--skip-download",
-                "--extractor-args", "youtube:player_client=ios",
+                "--extractor-args", "youtube:player_client=android",
                 f"https://www.youtube.com/watch?v={video_id}"
             ],
             capture_output=True,
