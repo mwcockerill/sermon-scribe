@@ -213,11 +213,6 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
             print(f"Skipping daily/morning video: {title}")
             continue
 
-        # Check if video is available (not upcoming)
-        if not is_video_available(video["video_id"]):
-            print(f"Skipping upcoming/unavailable video: {title}")
-            continue
-
         new_videos.append(video)
 
     return new_videos
