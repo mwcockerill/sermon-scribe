@@ -5,6 +5,8 @@ Transcribes audio/video files and returns timestamped segments
 for downstream processing (segmentation, cleanup).
 """
 
+import re
+
 import torch
 import whisper
 from pathlib import Path
@@ -48,10 +50,11 @@ def transcribe(
     result = model.transcribe(
         str(audio_path),
         language=language,
-        verbose=False
+        verbose=False,
+        condition_on_previous_text=False
     )
 
-    # Extract relevant data
+    # Extract relevant data, dropping hallucinated punctuation-only segments
     segments = [
         {
             "start": seg["start"],
@@ -59,10 +62,11 @@ def transcribe(
             "text": seg["text"].strip()
         }
         for seg in result["segments"]
+        if re.search(r"[^\s\W]", seg["text"])  # keep only segments with at least one word char
     ]
 
     return {
-        "text": result["text"].strip(),
+        "text": " ".join(seg["text"] for seg in segments),
         "segments": segments,
         "language": result.get("language", language)
     }
