@@ -29,17 +29,26 @@ WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "medium")
 GPT_MODEL = os.environ.get("GPT_MODEL", "gpt-4o-mini")
 
 
-def get_existing_sermons() -> set[str]:
-    """Get set of video IDs that already have transcripts."""
-    OUTPUT_DIR.mkdir(exist_ok=True)
-
-    existing = set()
-    for f in OUTPUT_DIR.glob("sermon_*.txt"):
-        # Try to extract video ID from filename or content
-        # For now, we'll track by date+title pattern
-        existing.add(f.stem)
-
-    return existing
+def get_published_video_ids() -> set[str]:
+    """Get set of video IDs that already have published Jekyll posts."""
+    published = set()
+    for f in JEKYLL_DIR.glob("*.md"):
+        with open(f) as fh:
+            in_front_matter = False
+            for line in fh:
+                stripped = line.strip()
+                if stripped == "---":
+                    if not in_front_matter:
+                        in_front_matter = True
+                        continue
+                    else:
+                        break  # End of front matter
+                if in_front_matter and stripped.startswith("youtube_id:"):
+                    vid = stripped.split(":", 1)[1].strip().strip('"')
+                    if vid:
+                        published.add(vid)
+                    break
+    return published
 
 
 def generate_jekyll_post(video: dict, content: str, date_str: str) -> Path:
@@ -86,16 +95,17 @@ def filename_for_video(video: dict) -> str:
         return f"sermon_{title}"
 
 
-def video_has_transcript(video: dict) -> bool:
-    """Check if a video already has a transcript file."""
-    expected = filename_for_video(video)
+def video_has_transcript(video: dict, published_ids: set[str]) -> bool:
+    """Check if a video already has a published Jekyll post or output transcript."""
+    # Primary check: video ID in published Jekyll posts (reliable, format-independent)
+    if video["video_id"] in published_ids:
+        return True
 
-    # Check for exact match or partial match (in case of naming variations)
+    # Fallback: check output files by filename pattern
+    expected = filename_for_video(video)
     for f in OUTPUT_DIR.glob("sermon_*.txt"):
-        # Match by video ID in filename or by date+title
-        if video["video_id"] in f.stem or expected in f.stem:
+        if expected in f.stem:
             return True
-        # Also check if the date and a significant part of title match
         if video.get("upload_date") and video["upload_date"] in f.stem:
             if video.get("safe_title", "")[:20] in f.stem:
                 return True
@@ -343,6 +353,7 @@ def main():
 
     # Find videos without transcripts
     OUTPUT_DIR.mkdir(exist_ok=True)
+    published_ids = get_published_video_ids()
     to_process = []
 
     for video in recent_videos:
@@ -359,7 +370,7 @@ def main():
             print(f"  [SKIP] {title[:50]}... (upcoming/unavailable)")
             continue
 
-        if video_has_transcript(video):
+        if video_has_transcript(video, published_ids):
             print(f"  [SKIP] {title[:50]}... (already has transcript)")
         else:
             print(f"  [NEW]  {title[:50]}...")
