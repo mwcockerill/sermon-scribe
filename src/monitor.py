@@ -250,14 +250,5 @@ if __name__ == "__main__":
         for video in new_videos:
             print(f"  - {video['title']}")
             print(f"    {video['url']}")
-
-        # Output for GitHub Actions
-        video = new_videos[0]
-        filename = f"sermon_{video['upload_date']}_{video['safe_title']}"
-        print(f"\n::set-output name=new_video::true")
-        print(f"::set-output name=video_url::{video['url']}")
-        print(f"::set-output name=video_id::{video['video_id']}")
-        print(f"::set-output name=filename::{filename}")
     else:
         print("No new videos found.")
-        print(f"::set-output name=new_video::false")
