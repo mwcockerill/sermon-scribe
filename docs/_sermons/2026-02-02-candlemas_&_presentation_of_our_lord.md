@@ -1,0 +1,26 @@
+---
+title: "Feb. 2, 2026 | Candlemas & Presentation of Our Lord"
+date: 2026-02-02
+youtube_id: "-6dSiQ7Ifmg"
+description: "In the name of the Father and of the Son and of the Holy Spirit, amen. This evening we are gathered for a very special feast, in fact, one of my favorites. Tonight we celebrate the feast of..."
+---
+
+In the name of the Father and of the Son and of the Holy Spirit, amen. This evening we are gathered for a very special feast, in fact, one of my favorites. Tonight we celebrate the feast of Candlemas, also known as the purification of the Blessed Virgin Mary, and also known as the presentation of Christ in the temple. For as many folks who have put away their Christmas trees and churches put away their decorations at Epiphany, the medieval church celebrated Christmas not merely for 12 days, but rather for 40 days. 
+
+So this night is especially sacred, this 40th night of Christmas, because this evening can be understood as our final celebration of the nativity of our Lord—a season of joy, love, and, as you see, of light. At Candlemas, churches like Atonement bless the candles they will use for the rest of the year. These candles remind us of Jesus Christ, the light of the world. At Christmas, we hear of this light in the prologue of John's Gospel: "What has come into being in him was life, and the life was the light of all people. The light shines in the darkness, and the darkness did not overcome it."
+
+This evening, the candles we bless are in remembrance of this holy event, which we just heard about in the second chapter of Luke's Gospel. In this account, the holy family goes to the temple in Jerusalem. Following the law of Moses, the Virgin Mary observes the rites of purification after her childbirth. At the same time, Jesus is presented and dedicated to the Lord. The family offers their sacrifice of two turtle doves or two pigeons. It is a time of gratitude, giving thanks to Almighty God. 
+
+Through the ups and downs of their engagement, God kept faith with Joseph and Mary. Mary safely delivers her healthy newborn son, Jesus, the Holy Child of Bethlehem. In Candlemas, we also see how, through the Holy Spirit, God's faithfulness is confirmed in fulfilling his promises. We see Simeon, an elderly holy man. God tells him that he will not taste death until he sees the Messiah for himself. Then we also see the prophet Anna, who praises God and who speaks of Jesus to those eagerly seeking Israel's redemption.
+
+In the Canticle of Simeon, one of the Church's most beloved hymns of praise, which we ourselves use at every evensong, Simeon gives glory to God for keeping his promises, proclaiming, "Master, now you are dismissing your servant in peace according to your word. For my eyes have seen your salvation, which you have prepared in the presence of all peoples, a light for revelation to the Gentiles and for glory to your people Israel." Simeon then blesses Mary and Joseph and turns to Mary to forewarn her that despite Jesus being the promised Messiah, not all will receive his message, eventually resulting in Mary experiencing her own personal emotional distress. 
+
+Simeon warns her, "This child is destined for the falling and the rising of many in Israel and to be a sign that will be opposed, so that the inner thoughts of many will be revealed, and a sword will pierce your own soul also." Tonight, as we celebrate together the feast of the presentation, I invite you to present yourselves before God this evening during our worship, to rededicate ourselves to following Jesus, the light of the world. 
+
+Like the Holy Family coming to the temple, for some of us, it was just a journey to get here. Just as Mary and Joseph had to navigate and overcome their obstacles and hardships, each one of us has had our own struggles that we bring with us here this evening. Be they known or unknown to family, friends, or loved ones, our struggles and our wounds are known to God. 
+
+In the midst of the violence, hatred, and cruelty that we see every night, be it in Minneapolis or in our own beloved city of Chicago, we know that we are not alone because Jesus, the eternal Word made flesh, has dwelt among us as the light of the world. He is the light that shines in the darkness, which the darkness shall never, ever overcome. 
+
+And so let the light of Christ shine in our hearts, that God replaces our hearts of stone with hearts of flesh. Let the light of Christ shine in our homes and churches, that we might seek and serve Christ in all people. Let the light of Christ shine in Washington, that those who bear the authority of government might protect the vulnerable and serve the common good. Let the light of Christ shine in the prisons and even in the detention centers, that they might know that they are not forgotten by God and that we might remember they are our brothers and sisters made in God's image and likeness. 
+
+May we have the steadfast faith of Joseph and Mary, the prophetic faith of Simeon, and Anna's courageous witness to God's redemption. And in this present darkness, may Christ, the light of the world, dispel the darkness of our fears and despair. Strengthen our resolve to love the least of these and gladden our hearts to serve God with joy and thanksgiving. Amen.
