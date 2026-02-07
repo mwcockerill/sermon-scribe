@@ -6,6 +6,10 @@ ifneq (,$(wildcard .env))
     export
 endif
 
+# Use venv python, fall back to system python3
+VENV := .venv
+PYTHON := $(if $(wildcard $(VENV)/bin/python3),$(VENV)/bin/python3,python3)
+
 # Default video URL (override with: make download URL=https://...)
 URL ?=
 # Whisper model size (tiny, base, small, medium, large)
@@ -27,7 +31,7 @@ DAYS ?= 7
 help:
 	@echo "Sermon Scribe Commands:"
 	@echo ""
-	@echo "  make install              Install Python dependencies"
+	@echo "  make install              Create venv and install Python dependencies"
 	@echo "  make monitor              Check for new videos on YouTube channel"
 	@echo "  make catch-up             Process recent videos missing transcripts (local)"
 	@echo "  make download URL=<url>   Download audio from YouTube video"
@@ -54,19 +58,20 @@ help:
 	@echo "  make catch-up DAYS=14     Process last 14 days and push to GitHub"
 
 install:
-	pip3 install -r requirements.txt
+	python3 -m venv $(VENV)
+	$(VENV)/bin/pip install -r requirements.txt
 
 monitor:
 ifndef CHANNEL_ID
 	$(error CHANNEL_ID is required. Usage: make monitor CHANNEL_ID=UC...)
 endif
-	python3 src/monitor.py $(CHANNEL_ID)
+	$(PYTHON) src/monitor.py $(CHANNEL_ID)
 
 catch-up:
 ifndef CHANNEL_ID
 	$(error CHANNEL_ID is required. Usage: make catch-up CHANNEL_ID=UC... or set YOUTUBE_CHANNEL_ID)
 endif
-	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) python3 src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS) --push
+	WHISPER_MODEL=$(MODEL) GPT_MODEL=$(GPT) $(PYTHON) src/process_recent.py --channel $(CHANNEL_ID) --days $(DAYS) --push
 
 download:
 ifndef URL
@@ -78,13 +83,13 @@ endif
 	@echo "Downloaded to: output/audio.mp3"
 
 transcribe:
-	python3 src/transcribe.py $(INPUT) $(MODEL)
+	$(PYTHON) src/transcribe.py $(INPUT) $(MODEL)
 
 segment:
-	python3 src/segment.py $(TRANSCRIPT) $(GPT)
+	$(PYTHON) src/segment.py $(TRANSCRIPT) $(GPT)
 
 cleanup:
-	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
+	$(PYTHON) src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
 
 run:
 ifndef URL
@@ -93,7 +98,7 @@ endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
 	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
-	python3 src/transcribe.py output/audio.mp3 $(MODEL)
+	$(PYTHON) src/transcribe.py output/audio.mp3 $(MODEL)
 
 full:
 ifndef URL
@@ -102,9 +107,9 @@ endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
 	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
-	python3 src/transcribe.py output/audio.mp3 $(MODEL)
-	python3 src/segment.py audio_transcript.json $(GPT)
-	python3 src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
+	$(PYTHON) src/transcribe.py output/audio.mp3 $(MODEL)
+	$(PYTHON) src/segment.py audio_transcript.json $(GPT)
+	$(PYTHON) src/cleanup.py audio_sermon.json $(GPT) output/sermon.txt
 	@echo ""
 	@echo "Done! Cleaned sermon saved to: output/sermon.txt"
 
@@ -115,10 +120,10 @@ endif
 	@mkdir -p output
 	@rm -f output/audio.mp3
 	@echo "Getting video metadata..."
-	$(eval VIDEO_ID := $(shell python3 -c "import re; m = re.search(r'v=([^&]+)', '$(URL)'); print(m.group(1) if m else '')"))
+	$(eval VIDEO_ID := $(shell $(PYTHON) -c "import re; m = re.search(r'v=([^&]+)', '$(URL)'); print(m.group(1) if m else '')"))
 	$(eval OEMBED_JSON := $(shell curl -s "https://www.youtube.com/oembed?url=$(URL)&format=json"))
 	$(eval TITLE := $(shell echo '$(OEMBED_JSON)' | jq -r '.title'))
-	$(eval DATE_STR := $(shell python3 -c "import re; m = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}', '$(TITLE)'); print(m.group(0) if m else '')"))
+	$(eval DATE_STR := $(shell $(PYTHON) -c "import re; m = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}', '$(TITLE)'); print(m.group(0) if m else '')"))
 	$(eval FORMATTED_DATE := $(shell date -j -f "%b. %d, %Y" "$(DATE_STR)" +%Y-%m-%d 2>/dev/null || echo ""))
 	$(eval SAFE_TITLE := $(shell echo "$(TITLE)" | tr ' ' '_' | tr -cd '[:alnum:]_-' | cut -c1-100))
 	$(eval FILENAME := $(if $(FORMATTED_DATE),sermon_$(FORMATTED_DATE)_$(SAFE_TITLE),sermon_$(SAFE_TITLE)))
@@ -130,13 +135,13 @@ endif
 	@echo "Downloading audio..."
 	yt-dlp --extractor-args youtube:player_client=android -x --audio-format mp3 -o "output/audio.%(ext)s" "$(URL)"
 	@echo "Transcribing..."
-	python3 src/transcribe.py output/audio.mp3 $(MODEL)
+	$(PYTHON) src/transcribe.py output/audio.mp3 $(MODEL)
 	@echo "Segmenting..."
-	python3 src/segment.py audio_transcript.json $(GPT)
+	$(PYTHON) src/segment.py audio_transcript.json $(GPT)
 	@echo "Cleaning up transcript..."
-	python3 src/cleanup.py audio_sermon.json $(GPT) "output/$(FILENAME).txt"
+	$(PYTHON) src/cleanup.py audio_sermon.json $(GPT) "output/$(FILENAME).txt"
 	@echo "Publishing to Jekyll..."
-	python3 src/publish_sermon.py "output/$(FILENAME).txt" "$(TITLE)" "$(FORMATTED_DATE)" "$(VIDEO_ID)"
+	$(PYTHON) src/publish_sermon.py "output/$(FILENAME).txt" "$(TITLE)" "$(FORMATTED_DATE)" "$(VIDEO_ID)"
 	@echo ""
 	@echo "Done! Sermon published to docs/_sermons/"
 	@echo "Next steps:"
