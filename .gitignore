@@ -18,5 +18,8 @@ venv/
 .vscode/
 .idea/
 
+# Logs
+logs/
+
 # OS
 .DS_Store
