@@ -9,6 +9,8 @@ endif
 # Use venv python, fall back to system python3
 VENV := .venv
 PYTHON := $(if $(wildcard $(VENV)/bin/python3),$(VENV)/bin/python3,python3)
+# Ensure venv binaries (yt-dlp, etc.) are on PATH for subprocess calls
+export PATH := $(if $(wildcard $(VENV)/bin),$(CURDIR)/$(VENV)/bin:$(PATH),$(PATH))
 
 # Default video URL (override with: make download URL=https://...)
 URL ?=
