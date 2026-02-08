@@ -268,7 +268,8 @@ def git_push(files: list[Path], message: str) -> bool:
             check=True
         )
 
-        # Push
+        # Pull any remote changes, then push
+        subprocess.run(["git", "pull", "--rebase"], check=True)
         subprocess.run(["git", "push"], check=True)
         print("Pushed to GitHub")
         return True
