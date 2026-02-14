@@ -391,21 +391,30 @@ def main():
 
     # Process each video
     processed_files = []
+    placeholder_files = []
     for video in to_process:
         success = process_video(video)
+        filename = filename_for_video(video)
+        output_file = OUTPUT_DIR / f"{filename}.txt"
         if success:
-            filename = filename_for_video(video)
-            processed_files.append(OUTPUT_DIR / f"{filename}.txt")
+            processed_files.append(output_file)
+        elif output_file.exists():
+            placeholder_files.append(output_file)
 
     print(f"\n{'='*60}")
     print(f"Processed {len(processed_files)} of {len(to_process)} videos")
 
     # Push if requested
-    if args.push and processed_files:
+    if args.push and (processed_files or placeholder_files):
         print("\nPushing to GitHub...")
         # Include both output/*.txt and docs/_sermons/*.md
-        all_files = processed_files + list(JEKYLL_DIR.glob("*.md"))
-        message = f"Add {len(processed_files)} sermon transcript(s)"
+        all_files = processed_files + placeholder_files + list(JEKYLL_DIR.glob("*.md"))
+        parts = []
+        if processed_files:
+            parts.append(f"{len(processed_files)} sermon transcript(s)")
+        if placeholder_files:
+            parts.append(f"{len(placeholder_files)} placeholder(s)")
+        message = f"Add {' and '.join(parts)}"
         git_push(all_files, message)
 
 
