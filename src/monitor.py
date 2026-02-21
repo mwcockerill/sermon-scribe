@@ -222,13 +222,6 @@ def check_for_new_videos(channel_id: str) -> list[dict]:
     return new_videos
 
 
-def mark_processed(video_id: str) -> None:
-    """Mark a video as processed."""
-    state = load_state()
-    state["last_video_id"] = video_id
-    save_state(state)
-
-
 if __name__ == "__main__":
     import sys
     import os

@@ -5,8 +5,6 @@ Convert sermon transcript to Jekyll markdown format and save to docs/_sermons/
 
 import sys
 import os
-import re
-from pathlib import Path
 
 
 def sanitize_filename(text):

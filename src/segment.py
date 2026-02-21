@@ -129,8 +129,8 @@ def extract_sermon_segments(
     return sermon_segments
 
 
-def segments_to_text(segments: list) -> str:
-    """Convert segments to plain text."""
+def flatten_segments(segments: list) -> str:
+    """Join segment texts into a single plain-text string."""
     return " ".join(seg["text"] for seg in segments)
 
 
@@ -172,7 +172,7 @@ if __name__ == "__main__":
             result["sermon_start"],
             result["sermon_end"]
         )
-        sermon_text = segments_to_text(sermon_segments)
+        sermon_text = flatten_segments(sermon_segments)
 
         print(f"\nExtracted {len(sermon_segments)} segments")
         print(f"Sermon length: ~{len(sermon_text.split())} words")

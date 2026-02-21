@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from monitor import fetch_latest_videos, sanitize_filename, is_video_available
 from transcribe import transcribe, segments_to_text
-from segment import segment_transcript, extract_sermon_segments, segments_to_text as sermon_to_text, timestamp_to_seconds
+from segment import segment_transcript, extract_sermon_segments, flatten_segments, timestamp_to_seconds
 from cleanup import cleanup_sermon
 
 
@@ -27,6 +27,15 @@ OUTPUT_DIR = Path(__file__).parent.parent / "output"
 JEKYLL_DIR = Path(__file__).parent.parent / "docs" / "_sermons"
 WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "medium")
 GPT_MODEL = os.environ.get("GPT_MODEL", "gpt-4o-mini")
+
+MONTH_MAP = {
+    'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+    'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+    'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+}
+DATE_IN_TITLE_RE = re.compile(
+    r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})'
+)
 
 
 def get_published_video_ids() -> set[str]:
@@ -211,7 +220,7 @@ def process_video(video: dict) -> bool:
             boundaries["sermon_start"],
             boundaries["sermon_end"]
         )
-        sermon_text = sermon_to_text(sermon_segments)
+        sermon_text = flatten_segments(sermon_segments)
     except Exception as e:
         print(f"  Error segmenting: {e}")
         return False
@@ -237,14 +246,10 @@ def process_video(video: dict) -> bool:
     # Extract date for Jekyll filename
     upload_date = video.get("upload_date", "")
     if not upload_date or upload_date == "NA":
-        # Try to extract from title
         title = video.get("title", "")
-        match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})', title)
+        match = DATE_IN_TITLE_RE.search(title)
         if match:
-            month_map = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
-            month = month_map[match.group(1)]
+            month = MONTH_MAP[match.group(1)]
             day = match.group(2).zfill(2)
             year = match.group(3)
             upload_date = f"{year}-{month}-{day}"
@@ -334,13 +339,9 @@ def main():
 
     def extract_date_from_title(title: str) -> str | None:
         """Try to extract date from title."""
-        # Match "Jan. 18, 2026" or "Dec. 28, 2025" format
-        match = re.search(r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})', title)
+        match = DATE_IN_TITLE_RE.search(title)
         if match:
-            month_map = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
-                         'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
-                         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
-            month = month_map[match.group(1)]
+            month = MONTH_MAP[match.group(1)]
             day = match.group(2).zfill(2)
             year = match.group(3)
             return f"{year}-{month}-{day}"

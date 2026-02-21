@@ -62,25 +62,6 @@ def cleanup_sermon(
     return response.choices[0].message.content
 
 
-def save_cleaned_sermon(
-    cleaned_text: str,
-    output_path: str,
-    title: str | None = None
-) -> None:
-    """
-    Save cleaned sermon to a text file.
-
-    Args:
-        cleaned_text: The cleaned sermon text
-        output_path: Path to save the file
-        title: Optional title to add at the top
-    """
-    with open(output_path, "w") as f:
-        if title:
-            f.write(f"{title}\n\n")
-        f.write(cleaned_text)
-
-
 if __name__ == "__main__":
     import sys
 
@@ -103,13 +84,10 @@ if __name__ == "__main__":
     with open(sermon_file) as f:
         data = json.load(f)
 
-    # Get the text - handle both formats
-    if isinstance(data, dict) and "text" in data:
-        sermon_text = data["text"]
-    elif isinstance(data, str):
-        sermon_text = data
-    else:
-        sermon_text = str(data)
+    if "text" not in data:
+        print(f"Error: JSON file has no 'text' key")
+        sys.exit(1)
+    sermon_text = data["text"]
 
     print(f"Cleaning sermon with {model}...")
     print(f"Input length: {len(sermon_text.split())} words")
@@ -118,8 +96,8 @@ if __name__ == "__main__":
 
     print(f"Output length: {len(cleaned.split())} words")
 
-    # Save to file
-    save_cleaned_sermon(cleaned, output_file)
+    with open(output_file, "w") as f:
+        f.write(cleaned)
     print(f"\nCleaned sermon saved to: {output_file}")
 
     # Also print preview
