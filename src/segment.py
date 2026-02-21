@@ -54,7 +54,8 @@ If you cannot identify a clear sermon, return:
 def segment_transcript(
     transcript_text: str,
     model: str = "gpt-4o-mini",
-    api_key: str | None = None
+    api_key: str | None = None,
+    title: str | None = None
 ) -> dict:
     """
     Identify sermon boundaries in a transcript.
@@ -63,17 +64,22 @@ def segment_transcript(
         transcript_text: Timestamped transcript text
         model: OpenAI model to use
         api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+        title: Video title to use as context for finding the correct sermon
 
     Returns:
         dict with sermon_start, sermon_end, confidence, reasoning
     """
     client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
+    user_content = f"Here is the church service transcript:\n\n{transcript_text}"
+    if title:
+        user_content = f"This recording is titled: \"{title}\"\n\nUse the title as context to identify the correct sermon segment.\n\n{user_content}"
+
     response = client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Here is the church service transcript:\n\n{transcript_text}"}
+            {"role": "user", "content": user_content}
         ],
         response_format={"type": "json_object"},
         temperature=0.1

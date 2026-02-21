@@ -176,7 +176,7 @@ def process_video(video: dict) -> bool:
     print(f"  Segmenting with GPT ({GPT_MODEL})...")
     try:
         formatted = segments_to_text(result["segments"], include_timestamps=True)
-        boundaries = segment_transcript(formatted, model=GPT_MODEL)
+        boundaries = segment_transcript(formatted, model=GPT_MODEL, title=title)
 
         if not boundaries.get("sermon_start") or not boundaries.get("sermon_end"):
             reason = boundaries.get('reasoning', 'Unknown reason')
