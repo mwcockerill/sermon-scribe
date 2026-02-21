@@ -63,7 +63,7 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
                 [
                     "yt-dlp",
                     "--flat-playlist",
-                    "--print", "%(id)s\t%(title)s\t%(upload_date)s",
+                    "--print", "%(id)s\t%(title)s\t%(timestamp)s",
                     "--playlist-end", str(limit),
                     channel_url
                 ],
@@ -80,19 +80,23 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
                 if "\t" in line:
                     parts = line.split("\t")
                     if len(parts) >= 3:
-                        video_id, title, upload_date = parts[0], parts[1], parts[2]
+                        video_id, title, timestamp = parts[0], parts[1], parts[2]
                     else:
-                        video_id, title, upload_date = parts[0], parts[1] if len(parts) > 1 else "", "NA"
+                        video_id, title, timestamp = parts[0], parts[1] if len(parts) > 1 else "", "NA"
 
                     # Skip if already seen
                     if video_id in all_videos:
                         continue
 
-                    # Format date as YYYY-MM-DD
-                    if upload_date and upload_date != "NA" and len(upload_date) == 8:
-                        formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+                    # Convert Unix timestamp to YYYY-MM-DD
+                    # %(timestamp)s is reliably populated in flat-playlist; %(upload_date)s often returns NA
+                    if timestamp and timestamp != "NA":
+                        try:
+                            formatted_date = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).strftime("%Y-%m-%d")
+                        except (ValueError, OSError):
+                            formatted_date = "NA"
                     else:
-                        formatted_date = upload_date
+                        formatted_date = "NA"
 
                     # Sanitize title for filename
                     safe_title = sanitize_filename(title)
@@ -150,8 +154,8 @@ def is_video_available(video_id: str) -> bool:
         try:
             video_info = json.loads(result.stdout)
             live_status = video_info.get("live_status", "not_live")
-            # Skip if upcoming, allow everything else (not_live, is_live, post_live)
-            return live_status != "is_upcoming"
+            # Only process completed recordings; skip upcoming and active livestreams
+            return live_status not in ("is_upcoming", "is_live")
         except json.JSONDecodeError:
             # If we can't parse, assume it's available
             return True
