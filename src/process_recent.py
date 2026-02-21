@@ -249,6 +249,10 @@ def process_video(video: dict) -> bool:
 def git_push(files: list[Path], message: str) -> bool:
     """Commit and push files to git."""
     try:
+        # Pull remote changes first so our staged files cleanly overwrite
+        # any placeholders already on the remote (avoids add/add conflicts)
+        subprocess.run(["git", "pull", "--rebase"], check=True)
+
         # Add files
         subprocess.run(["git", "add"] + [str(f) for f in files], check=True)
 
@@ -262,14 +266,12 @@ def git_push(files: list[Path], message: str) -> bool:
             print("No changes to commit")
             return True
 
-        # Commit
+        # Commit and push
         subprocess.run(
             ["git", "commit", "-m", message],
             check=True
         )
 
-        # Pull any remote changes, then push
-        subprocess.run(["git", "pull", "--rebase"], check=True)
         subprocess.run(["git", "push"], check=True)
         print("Pushed to GitHub")
         return True
