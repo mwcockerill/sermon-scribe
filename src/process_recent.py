@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from monitor import fetch_latest_videos, sanitize_filename, is_video_available
 from transcribe import transcribe, segments_to_text
-from segment import segment_transcript, extract_sermon_segments, segments_to_text as sermon_to_text
+from segment import segment_transcript, extract_sermon_segments, segments_to_text as sermon_to_text, timestamp_to_seconds
 from cleanup import cleanup_sermon
 
 
@@ -95,20 +95,21 @@ def filename_for_video(video: dict) -> str:
         return f"sermon_{title}"
 
 
-def video_has_transcript(video: dict, published_ids: set[str]) -> bool:
-    """Check if a video already has a published Jekyll post or output transcript."""
+def video_has_transcript(video: dict, published_ids: set[str], force: bool = False) -> bool:
+    """Check if a video already has a published Jekyll post or placeholder."""
     # Primary check: video ID in published Jekyll posts (reliable, format-independent)
     if video["video_id"] in published_ids:
         return True
 
-    # Fallback: check output files by filename pattern
+    # Check for a placeholder file (previous attempt found no sermon)
     expected = filename_for_video(video)
-    for f in OUTPUT_DIR.glob("sermon_*.txt"):
-        if expected in f.stem:
-            return True
-        if video.get("upload_date") and video["upload_date"] in f.stem:
-            if video.get("safe_title", "")[:20] in f.stem:
-                return True
+    placeholder = OUTPUT_DIR / f"{expected}.txt"
+    if placeholder.exists() and placeholder.read_text().startswith("[NO SERMON FOUND]"):
+        if force:
+            print(f"  [FORCE] Removing placeholder to retry: {placeholder.name}")
+            placeholder.unlink()
+            return False
+        return True
 
     return False
 
@@ -148,16 +149,16 @@ def process_video(video: dict) -> bool:
     print(f"\nProcessing: {title}")
     print(f"  URL: {url}")
 
-    # Paths
-    audio_path = OUTPUT_DIR / "audio.mp3"
-    transcript_path = OUTPUT_DIR / "audio_transcript.json"
+    # Paths — scoped to this video_id to prevent cross-video contamination
+    audio_path = OUTPUT_DIR / f"audio_{video_id}.mp3"
+    transcript_path = OUTPUT_DIR / f"audio_{video_id}_transcript.json"
 
     # 1. Download audio
     if not download_audio(url, audio_path.with_suffix(".%(ext)s")):
         return False
 
     # Find the actual downloaded file (might have different extension initially)
-    audio_file = OUTPUT_DIR / "audio.mp3"
+    audio_file = OUTPUT_DIR / f"audio_{video_id}.mp3"
     if not audio_file.exists():
         print("  Error: Audio file not found after download")
         return False
@@ -189,13 +190,28 @@ def process_video(video: dict) -> bool:
             print(f"  Saved placeholder: {output_file.name}")
             return False
 
+        confidence = boundaries.get("confidence", "unknown")
+        reasoning = boundaries.get("reasoning", "")
+        print(f"  Found sermon: {boundaries['sermon_start']} - {boundaries['sermon_end']} (confidence: {confidence})")
+        print(f"  Reasoning: {reasoning}")
+        if confidence in ("low", "medium"):
+            print(f"  WARNING: GPT confidence is '{confidence}' — review this transcript manually before publishing")
+
+        # Validate sermon duration
+        start_sec = timestamp_to_seconds(boundaries["sermon_start"])
+        end_sec = timestamp_to_seconds(boundaries["sermon_end"])
+        duration_min = (end_sec - start_sec) / 60
+        if duration_min < 5:
+            print(f"  WARNING: Sermon is only {duration_min:.1f} min — boundary may be wrong")
+        elif duration_min > 60:
+            print(f"  WARNING: Sermon is {duration_min:.1f} min — boundary may be too broad")
+
         sermon_segments = extract_sermon_segments(
             result["segments"],
             boundaries["sermon_start"],
             boundaries["sermon_end"]
         )
         sermon_text = sermon_to_text(sermon_segments)
-        print(f"  Found sermon: {boundaries['sermon_start']} - {boundaries['sermon_end']}")
     except Exception as e:
         print(f"  Error segmenting: {e}")
         return False
@@ -232,8 +248,10 @@ def process_video(video: dict) -> bool:
             day = match.group(2).zfill(2)
             year = match.group(3)
             upload_date = f"{year}-{month}-{day}"
+            print(f"  WARNING: Upload date missing from metadata — extracted from title: {upload_date}")
         else:
             upload_date = datetime.now().strftime("%Y-%m-%d")
+            print(f"  WARNING: Could not extract date from title '{title}' — using today ({upload_date}). Review this post!")
 
     jekyll_file = generate_jekyll_post(video, cleaned, upload_date)
     print(f"  Jekyll: {jekyll_file.name}")
@@ -241,7 +259,7 @@ def process_video(video: dict) -> bool:
     # Cleanup temp files
     audio_file.unlink(missing_ok=True)
     transcript_path.unlink(missing_ok=True)
-    (OUTPUT_DIR / "audio_sermon.json").unlink(missing_ok=True)
+    (OUTPUT_DIR / f"audio_{video_id}_sermon.json").unlink(missing_ok=True)
 
     return True
 
@@ -285,6 +303,7 @@ def main():
     parser.add_argument("--days", type=int, default=7, help="Look back this many days (default: 7)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without doing it")
     parser.add_argument("--push", action="store_true", help="Commit and push results to GitHub")
+    parser.add_argument("--force", action="store_true", help="Retry videos that previously had no sermon found")
     parser.add_argument("--channel", type=str, help="YouTube channel ID (or set YOUTUBE_CHANNEL_ID env var)")
     args = parser.parse_args()
 
@@ -373,7 +392,7 @@ def main():
             print(f"  [SKIP] {title[:50]}... (upcoming/unavailable)")
             continue
 
-        if video_has_transcript(video, published_ids):
+        if video_has_transcript(video, published_ids, force=args.force):
             print(f"  [SKIP] {title[:50]}... (already has transcript)")
         else:
             print(f"  [NEW]  {title[:50]}...")

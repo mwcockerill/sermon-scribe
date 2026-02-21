@@ -89,6 +89,19 @@ def segment_transcript(
     return result
 
 
+def timestamp_to_seconds(ts: str) -> float:
+    """Convert a timestamp string (HH:MM:SS, MM:SS, or seconds) to seconds."""
+    parts = ts.split(":")
+    if len(parts) == 3:
+        h, m, s = parts
+        return int(h) * 3600 + int(m) * 60 + float(s)
+    elif len(parts) == 2:
+        m, s = parts
+        return int(m) * 60 + float(s)
+    else:
+        return float(parts[0])
+
+
 def extract_sermon_segments(
     segments: list,
     start_time: str,
@@ -105,17 +118,6 @@ def extract_sermon_segments(
     Returns:
         List of segments within the sermon boundaries
     """
-    def timestamp_to_seconds(ts: str) -> float:
-        parts = ts.split(":")
-        if len(parts) == 3:
-            h, m, s = parts
-            return int(h) * 3600 + int(m) * 60 + float(s)
-        elif len(parts) == 2:
-            m, s = parts
-            return int(m) * 60 + float(s)
-        else:
-            return float(parts[0])
-
     start_sec = timestamp_to_seconds(start_time)
     end_sec = timestamp_to_seconds(end_time)
 
