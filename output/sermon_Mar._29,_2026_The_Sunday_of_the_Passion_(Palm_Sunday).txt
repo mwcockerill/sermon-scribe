@@ -1,1 +1,3 @@
-Sure, please provide the sermon transcript that you would like me to clean up.
+[NO SERMON FOUND]
+
+Palm Sunday liturgy includes the extended Passion Gospel reading, which appears to confuse the automated segmenter. Two pipeline attempts both failed to identify correct sermon boundaries. Manual review of video XWMgQm02dKQ required.
