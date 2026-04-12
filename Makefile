@@ -28,7 +28,7 @@ CHANNEL_ID ?= $(YOUTUBE_CHANNEL_ID)
 # Days to look back for catch-up
 DAYS ?= 7
 
-.PHONY: install download transcribe segment cleanup monitor catch-up publish clean help
+.PHONY: install download transcribe segment cleanup monitor catch-up publish backfill-authors clean help
 
 help:
 	@echo "Sermon Scribe Commands:"
@@ -43,7 +43,8 @@ help:
 	@echo "  make run URL=<url>        Download and transcribe in one step"
 	@echo "  make full URL=<url>       Full pipeline: download, transcribe, segment, cleanup"
 	@echo "  make publish URL=<url>    Complete pipeline including GitHub Pages publish"
-	@echo "  make clean                Remove downloaded files and transcripts"
+	@echo "  make backfill-authors     Add missing authors to already-published sermons
+  make clean                Remove downloaded files and transcripts"
 	@echo ""
 	@echo "Options:"
 	@echo "  MODEL=medium              Whisper model (tiny/base/small/medium/large)"
@@ -150,6 +151,9 @@ endif
 	@echo "  git add output/$(FILENAME).txt docs/_sermons/"
 	@echo "  git commit -m 'Add sermon: $(FILENAME)'"
 	@echo "  git push"
+
+backfill-authors:
+	$(PYTHON) src/backfill_authors.py
 
 clean:
 	rm -rf output/*
