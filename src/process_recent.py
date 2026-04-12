@@ -21,6 +21,7 @@ from monitor import fetch_latest_videos, sanitize_filename, is_video_available
 from transcribe import transcribe, segments_to_text
 from segment import segment_transcript, extract_sermon_segments, flatten_segments, timestamp_to_seconds
 from cleanup import cleanup_sermon
+from authors import fetch_authors, lookup_author
 
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
@@ -60,7 +61,7 @@ def get_published_video_ids() -> set[str]:
     return published
 
 
-def generate_jekyll_post(video: dict, content: str, date_str: str) -> Path:
+def generate_jekyll_post(video: dict, content: str, date_str: str, author: str | None = None) -> Path:
     """Generate a Jekyll-compatible markdown file for the sermon."""
     JEKYLL_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -77,11 +78,12 @@ def generate_jekyll_post(video: dict, content: str, date_str: str) -> Path:
     description = paragraphs[0][:200] + "..." if paragraphs else ""
 
     # Build front matter
+    author_line = f'\nauthor: "{author}"' if author else ""
     front_matter = f"""---
 title: "{title}"
 date: {date_str}
 youtube_id: "{video_id}"
-description: "{description.replace('"', "'")}"
+description: "{description.replace('"', "'")}"{ author_line}
 ---
 
 """
@@ -258,7 +260,13 @@ def process_video(video: dict) -> bool:
             upload_date = datetime.now().strftime("%Y-%m-%d")
             print(f"  WARNING: Could not extract date from title '{title}' — using today ({upload_date}). Review this post!")
 
-    jekyll_file = generate_jekyll_post(video, cleaned, upload_date)
+    author = lookup_author(upload_date)
+    if author:
+        print(f"  Author: {author}")
+    else:
+        print(f"  Author: not found in sheet")
+
+    jekyll_file = generate_jekyll_post(video, cleaned, upload_date, author=author)
     print(f"  Jekyll: {jekyll_file.name}")
 
     # Cleanup temp files

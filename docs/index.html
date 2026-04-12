@@ -100,7 +100,7 @@ layout: null
       {% for sermon in sorted_sermons %}
       <li class="sermon-item">
         <a href="{{ sermon.url | relative_url }}" class="sermon-title">{{ sermon.title }}</a>
-        <div class="sermon-date">{{ sermon.date | date: "%B %d, %Y" }}</div>
+        <div class="sermon-date">{{ sermon.date | date: "%B %d, %Y" }}{% if sermon.author %} &middot; {{ sermon.author }}{% endif %}</div>
         {% if sermon.description %}
         <p class="sermon-excerpt">{{ sermon.description }}</p>
         {% endif %}
