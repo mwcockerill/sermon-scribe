@@ -43,8 +43,8 @@ help:
 	@echo "  make run URL=<url>        Download and transcribe in one step"
 	@echo "  make full URL=<url>       Full pipeline: download, transcribe, segment, cleanup"
 	@echo "  make publish URL=<url>    Complete pipeline including GitHub Pages publish"
-	@echo "  make backfill-authors     Add missing authors to already-published sermons
-  make clean                Remove downloaded files and transcripts"
+	@echo "  make backfill-authors     Add missing authors to already-published sermons"
+	@echo "  make clean                Remove downloaded files and transcripts"
 	@echo ""
 	@echo "Options:"
 	@echo "  MODEL=medium              Whisper model (tiny/base/small/medium/large)"
