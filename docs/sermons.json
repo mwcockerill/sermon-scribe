@@ -1,0 +1,16 @@
+---
+layout: null
+---
+{% assign sorted_sermons = site.sermons | sort: 'date' | reverse %}[
+{%- for sermon in sorted_sermons %}
+{
+  "title": "{{ sermon.title | json_escape }}",
+  "date": "{{ sermon.date | date: '%Y-%m-%d' }}",
+  "author": "{{ sermon.author | default: '' | json_escape }}",
+  "youtube_id": "{{ sermon.youtube_id | default: '' | json_escape }}",
+  "description": "{{ sermon.description | default: '' | json_escape }}",
+  "url": "{{ sermon.url | json_escape }}",
+  "content": "{{ sermon.content | json_escape }}"
+}
+{%- unless forloop.last %},{%- endunless %}
+{%- endfor %}]
