@@ -63,6 +63,35 @@ def extract_date_from_title(title: str) -> str | None:
     return None
 
 
+def resolve_service_date(video: dict, today: str | None = None) -> str:
+    """
+    Determine the date a service actually took place, as YYYY-MM-DD.
+
+    Most reliable source first: the video's release_date (when a livestream aired),
+    then the date in the title (the church's own label, occasionally mistyped), then
+    today as a last resort — which is almost always wrong and says so loudly.
+
+    `today` is injectable so the fallback branch is testable.
+    """
+    title = video.get("title", "")
+    video_date = fetch_video_date(video.get("video_id", ""))
+    title_date = extract_date_from_title(title)
+
+    if video_date:
+        if title_date and title_date != video_date:
+            print(f"  NOTE: title says {title_date} but the video aired {video_date} — using {video_date}")
+        return video_date
+
+    if title_date:
+        print(f"  WARNING: no date in video metadata — extracted from title: {title_date}")
+        return title_date
+
+    fallback = today or datetime.now().strftime("%Y-%m-%d")
+    print(f"  WARNING: no date in metadata or title '{title}' — falling back to today ({fallback}).")
+    print(f"  WARNING: this date is a guess and is probably wrong. Fix it before publishing.")
+    return fallback
+
+
 def fetch_video_date(video_id: str) -> str | None:
     """
     Fetch the authoritative date for a video as YYYY-MM-DD, or None if unavailable.
@@ -302,23 +331,7 @@ def process_video(video: dict) -> bool:
     print(f"  Saved: {output_file.name}")
 
     # 6. Generate Jekyll page
-    # Determine the service date, most reliable source first. release_date is when a
-    # livestream actually aired; the title is the church's own label and is occasionally
-    # mistyped; today's date is a last resort and is almost always wrong.
-    title = video.get("title", "")
-    upload_date = fetch_video_date(video_id)
-    title_date = extract_date_from_title(title)
-
-    if upload_date:
-        if title_date and title_date != upload_date:
-            print(f"  NOTE: title says {title_date} but the video aired {upload_date} — using {upload_date}")
-    elif title_date:
-        upload_date = title_date
-        print(f"  WARNING: no date in video metadata — extracted from title: {upload_date}")
-    else:
-        upload_date = datetime.now().strftime("%Y-%m-%d")
-        print(f"  WARNING: no date in metadata or title '{title}' — falling back to today ({upload_date}).")
-        print(f"  WARNING: this date is a guess and is probably wrong. Fix it before publishing.")
+    upload_date = resolve_service_date(video)
 
     author = lookup_author(upload_date)
     if author:
