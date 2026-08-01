@@ -88,8 +88,11 @@ def fetch_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
                     if video_id in all_videos:
                         continue
 
-                    # Convert Unix timestamp to YYYY-MM-DD
-                    # %(timestamp)s is reliably populated in flat-playlist; %(upload_date)s often returns NA
+                    # Convert Unix timestamp to YYYY-MM-DD.
+                    # NOTE: YouTube channel listings often return NA here for every entry —
+                    # --flat-playlist does not fetch per-video metadata. Callers that need a
+                    # real date must look the video up individually (see
+                    # process_recent.fetch_video_date); treat "NA" as expected, not exceptional.
                     if timestamp and timestamp != "NA":
                         try:
                             formatted_date = datetime.fromtimestamp(int(timestamp), tz=timezone.utc).strftime("%Y-%m-%d")

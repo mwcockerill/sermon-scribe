@@ -1,5 +1,6 @@
 # Output files (keep sermon transcripts, ignore the rest)
-output/audio.*
+# audio* covers both the legacy audio.mp3 and the per-video audio_<video_id>.mp3
+output/audio*
 *_transcript.json
 *_sermon.json
 

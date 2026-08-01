@@ -1,6 +1,6 @@
 ---
 title: "June 7, 2026 | The Feast of Corpus Christi"
-date: 2026-06-08
+date: 2026-06-07
 youtube_id: "M4YsHZanK8w"
 description: "In the name of the Father, and of the Son, and of the Holy Spirit. About two weeks ago, the Bishop of Rome published an encyclical called *Magnifica Humanitas*, or *Magnificent Humanity*, on safeguard..."
 ---

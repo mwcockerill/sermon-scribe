@@ -34,9 +34,66 @@ MONTH_MAP = {
     'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
     'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
 }
+# Accepts abbreviated and full month names: "Apr. 19, 2026", "July 29, 2026", "June 7 2026".
+# The trailing [a-z]* is essential — without it "July" matches "Jul" and then fails on "y".
 DATE_IN_TITLE_RE = re.compile(
-    r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+(\d{1,2}),?\s+(\d{4})'
+    r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})'
 )
+
+
+def extract_date_from_title(title: str) -> str | None:
+    """Extract a YYYY-MM-DD date from a video title, or None if there isn't one."""
+    match = DATE_IN_TITLE_RE.search(title)
+    if match:
+        month = MONTH_MAP[match.group(1)]
+        day = match.group(2).zfill(2)
+        year = match.group(3)
+        return f"{year}-{month}-{day}"
+
+    # Match YYYY MM DD pattern (Morning Prayer titles)
+    match = re.search(r'(\d{4})\s+(\d{2})\s+(\d{2})', title)
+    if match:
+        return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
+
+    # Match YYYY-MM-DD pattern
+    match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
+    if match:
+        return match.group(1)
+
+    return None
+
+
+def fetch_video_date(video_id: str) -> str | None:
+    """
+    Fetch the authoritative date for a video as YYYY-MM-DD, or None if unavailable.
+
+    Prefers release_date (when a livestream actually aired) over upload_date, which
+    can be a day or more later. Requires a per-video lookup: --flat-playlist returns
+    NA for both fields, so the channel listing cannot supply this.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "yt-dlp",
+                "--skip-download",
+                "--print", "%(release_date)s\t%(upload_date)s",
+                f"https://www.youtube.com/watch?v={video_id}",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            return None
+
+        parts = result.stdout.strip().split("\t")
+        for value in parts:  # release_date first, then upload_date
+            if value and value != "NA" and len(value) == 8 and value.isdigit():
+                return f"{value[:4]}-{value[4:6]}-{value[6:8]}"
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+
+    return None
 
 
 def get_published_video_ids() -> set[str]:
@@ -245,20 +302,23 @@ def process_video(video: dict) -> bool:
     print(f"  Saved: {output_file.name}")
 
     # 6. Generate Jekyll page
-    # Extract date for Jekyll filename
-    upload_date = video.get("upload_date", "")
-    if not upload_date or upload_date == "NA":
-        title = video.get("title", "")
-        match = DATE_IN_TITLE_RE.search(title)
-        if match:
-            month = MONTH_MAP[match.group(1)]
-            day = match.group(2).zfill(2)
-            year = match.group(3)
-            upload_date = f"{year}-{month}-{day}"
-            print(f"  WARNING: Upload date missing from metadata — extracted from title: {upload_date}")
-        else:
-            upload_date = datetime.now().strftime("%Y-%m-%d")
-            print(f"  WARNING: Could not extract date from title '{title}' — using today ({upload_date}). Review this post!")
+    # Determine the service date, most reliable source first. release_date is when a
+    # livestream actually aired; the title is the church's own label and is occasionally
+    # mistyped; today's date is a last resort and is almost always wrong.
+    title = video.get("title", "")
+    upload_date = fetch_video_date(video_id)
+    title_date = extract_date_from_title(title)
+
+    if upload_date:
+        if title_date and title_date != upload_date:
+            print(f"  NOTE: title says {title_date} but the video aired {upload_date} — using {upload_date}")
+    elif title_date:
+        upload_date = title_date
+        print(f"  WARNING: no date in video metadata — extracted from title: {upload_date}")
+    else:
+        upload_date = datetime.now().strftime("%Y-%m-%d")
+        print(f"  WARNING: no date in metadata or title '{title}' — falling back to today ({upload_date}).")
+        print(f"  WARNING: this date is a guess and is probably wrong. Fix it before publishing.")
 
     author = lookup_author(upload_date)
     if author:
@@ -344,27 +404,6 @@ def main():
     # Filter to videos within date range
     cutoff = datetime.now() - timedelta(days=args.days)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
-
-    def extract_date_from_title(title: str) -> str | None:
-        """Try to extract date from title."""
-        match = DATE_IN_TITLE_RE.search(title)
-        if match:
-            month = MONTH_MAP[match.group(1)]
-            day = match.group(2).zfill(2)
-            year = match.group(3)
-            return f"{year}-{month}-{day}"
-
-        # Match YYYY MM DD pattern (Morning Prayer titles)
-        match = re.search(r'(\d{4})\s+(\d{2})\s+(\d{2})', title)
-        if match:
-            return f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
-
-        # Match YYYY-MM-DD pattern
-        match = re.search(r'(\d{4}-\d{2}-\d{2})', title)
-        if match:
-            return match.group(1)
-
-        return None
 
     recent_videos = []
     for v in videos:
