@@ -22,6 +22,7 @@ from transcribe import transcribe, segments_to_text
 from segment import segment_transcript, extract_sermon_segments, flatten_segments, timestamp_to_seconds
 from cleanup import cleanup_sermon
 from authors import fetch_authors, lookup_author
+from publish_sermon import update_state
 
 
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
@@ -341,6 +342,10 @@ def process_video(video: dict) -> bool:
 
     jekyll_file = generate_jekyll_post(video, cleaned, upload_date, author=author)
     print(f"  Jekyll: {jekyll_file.name}")
+
+    # Record what we published. A batch runs newest-first, and update_state only
+    # moves forward, so the marker settles on the newest sermon in the run.
+    update_state(video_id, upload_date)
 
     # Cleanup temp files
     audio_file.unlink(missing_ok=True)
