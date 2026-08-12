@@ -15,3 +15,6 @@ google-api-python-client
 # Utilities
 pyyaml
 python-dotenv
+
+# Testing
+pytest

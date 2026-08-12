@@ -3,8 +3,52 @@
 Convert sermon transcript to Jekyll markdown format and save to docs/_sermons/
 """
 
+import json
 import sys
 import os
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+STATE_FILE = Path(__file__).parent.parent / "state.json"
+
+
+def update_state(video_id, date, state_file=None):
+    """
+    Advance state.json to the sermon we just published.
+
+    The monitor uses last_video_id as a stop marker when walking the channel
+    listing, so it must only ever move forward. Backfilling an older service
+    (or publishing with a date the Makefile couldn't parse) leaves it alone --
+    rewinding the marker would make the monitor re-report everything newer.
+
+    Returns True if the state was advanced, False if it was left as-is.
+    """
+    state_file = Path(state_file) if state_file else STATE_FILE
+
+    if not date:
+        print("No date for this sermon - leaving state.json unchanged")
+        return False
+
+    state = {}
+    if state_file.exists():
+        with open(state_file) as f:
+            state = json.load(f)
+
+    last_published = state.get("last_published_date")
+    if last_published and date <= last_published:
+        print(f"state.json already at {last_published} - not rewinding to {date}")
+        return False
+
+    state["last_video_id"] = video_id
+    state["last_published_date"] = date
+    state["last_check"] = datetime.now(timezone.utc).isoformat()
+
+    with open(state_file, "w") as f:
+        json.dump(state, f, indent=2)
+
+    print(f"Updated state.json: last_video_id={video_id} ({date})")
+    return True
 
 
 def sanitize_filename(text):
@@ -100,6 +144,9 @@ def main():
 
     # Create Jekyll sermon
     create_jekyll_sermon(sermon_text, title, date, video_id, output_dir)
+
+    # Record what we published so the monitor doesn't re-report it
+    update_state(video_id, date)
 
 
 if __name__ == "__main__":
